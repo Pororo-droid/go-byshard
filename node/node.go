@@ -1,0 +1,48 @@
+package node
+
+import (
+	"Pororo-droid/go-byshard/consensus"
+	"Pororo-droid/go-byshard/network"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+)
+
+type Node struct {
+	privateKey *ecdsa.PrivateKey
+	network    *network.Kademlia
+	consensus  consensus.Consensus
+}
+
+func NewNode(ip string, port int, alg string) Node {
+	node := new(Node)
+
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+
+	network := network.NewKademlia(ip, port)
+	network.Setup()
+
+	node.privateKey = privateKey
+	node.network = network
+
+	switch alg {
+	case "pbft":
+		node.consensus = consensus.NewPBFT(ip, port, privateKey)
+	}
+
+	return *node
+}
+
+func (n *Node) Run() {
+	for {
+		select {
+		case consensus_msg := <-n.network.ConsensusMessages:
+			n.consensus.Handle(consensus_msg.Data)
+		case broadcast_msg := <-n.consensus.GetBroadcastMessages():
+			n.network.Broadcast(broadcast_msg)
+		}
+	}
+}
