@@ -16,6 +16,7 @@ var (
 
 type Config struct {
 	Bootstrap BootstrapConfig `json:"bootstrap"`
+	ChanelSize int `json:"chanel_size"`
 }
 
 type BootstrapConfig struct {

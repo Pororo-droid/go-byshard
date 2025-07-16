@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"Pororo-droid/go-byshard/crypto"
+	"Pororo-droid/go-byshard/config"
 	"Pororo-droid/go-byshard/message"
 	"Pororo-droid/go-byshard/types"
 	"Pororo-droid/go-byshard/utils"
@@ -33,6 +34,7 @@ type PBFT struct {
 	privateKey *ecdsa.PrivateKey
 
 	mu                 sync.Mutex
+	messageID int
 	BroadcastMessages  chan message.Message
 	receivedPrepreares map[string]*message.Preprepare
 }
@@ -45,7 +47,7 @@ func NewPBFT(ip string, port int, private_key *ecdsa.PrivateKey) *PBFT {
 		View:               0,
 		Sequence:           0,
 		privateKey:         private_key,
-		BroadcastMessages:  make(chan message.Message, 100),
+		BroadcastMessages:  make(chan message.Message, config.GetConfig().ChanelSize),
 		receivedPrepreares: make(map[string]*message.Preprepare),
 	}
 }
@@ -59,6 +61,7 @@ func (n *PBFT) Handle(msg interface{}) {
 
 	var request_msg message.Request
 	var preprepare_msg message.Preprepare
+	var prepare_msg message.Prepare
 
 	if err := mapToStruct(map_data, &request_msg); err == nil {
 		n.Propose(request_msg)
@@ -66,7 +69,12 @@ func (n *PBFT) Handle(msg interface{}) {
 	}
 
 	if err := mapToStruct(map_data, &preprepare_msg); err == nil {
-		n.Prepare(preprepare_msg)
+		n.HandlePreprepare(preprepare_msg)
+		return
+	}
+
+	if err := mapToStruct(map_data, &prepare_msg); err == nil {
+		n.HandlePrepare(prepare_msg)
 		return
 	}
 
@@ -104,14 +112,14 @@ func (n *PBFT) Propose(req message.Request) {
 	// Broadcast to all backup nodes
 	n.Broadcast(preprepare_msg)
 
-	fmt.Printf("Primary Node Sent Pre-prepare for sequence %d\n", n.Sequence)
-	n.Prepare(preprepare_msg)
+	fmt.Printf("[%s] Sent Pre-prepare for sequence %d\n",n.id, n.Sequence)
+	n.HandlePreprepare(preprepare_msg)
 }
 
-func (n *PBFT) Prepare(msg message.Preprepare) {
+func (n *PBFT) HandlePreprepare(msg message.Preprepare) {
 	key := fmt.Sprintf("%d-%d", msg.View, msg.Sequence)
 	if _, exists := n.receivedPrepreares[key]; exists {
-		fmt.Printf("[%s] 같은 view-seq에 대해 pre-prepare 수신", n.id)
+		fmt.Printf("[%s] 같은 view-seq에 대해 pre-prepare 수신, msg: %v", n.id,msg)
 		return
 	}
 
@@ -140,26 +148,32 @@ func (n *PBFT) Prepare(msg message.Preprepare) {
 	n.receivedPrepreares[key] = &msg
 
 	digest, err := crypto.ECDSASign(n.privateKey, utils.ToByte(msg))
-	fmt.Printf("[%s] 1111111\n", n.id)
+
 	if err != nil {
 		fmt.Errorf("[%v] Error while signing ECDSA %v", n.id, err)
 		fmt.Printf("[%s] Error while signing ECDSA %s", n.id, err)
 		return
 	}
-	fmt.Printf("[%s] 2222222\n", n.id)
+
 	prepare_msg := message.Prepare{
 		Type:        "PREPARE",
-		View:        n.View,
-		Sequence:    n.Sequence,
+		View:        msg.View,
+		Sequence:    msg.Sequence,
 		PublicKey_X: n.privateKey.PublicKey.X.Bytes(),
 		PublicKey_Y: n.privateKey.PublicKey.Y.Bytes(),
 		Preprepare:  msg,
 		Digest:      digest,
 		Timestamp:   time.Now(),
 	}
+
+	fmt.Printf("[%s] Broadcasting Prepare for sequence %d\n", n.id, msg.Sequence)
 	n.Broadcast(prepare_msg)
-	fmt.Printf("[%s] 333333333\n", n.id)
-	fmt.Printf("[%s] Sent Prepare for sequence %d\n", n.id, n.Sequence)
+
+	fmt.Printf("[%s] Broadcast Prepare for sequence %d\n", n.id, msg.Sequence)
+}
+
+func (n *PBFT) HandlePrepare(msg message.Prepare) {
+	fmt.Printf("[%s] Received Prepare message\n",n.id)
 }
 
 func (n *PBFT) isPrimary() bool {
@@ -172,11 +186,13 @@ func (n *PBFT) isPrimary() bool {
 func (n *PBFT) Broadcast(msg interface{}) {
 	network_msg := message.Message{
 		Type:      message.BROADCAST,
+		MessageID: fmt.Sprintf("%s:%d:%d",n.id,n.port,n.messageID),
 		TTL:       5,
 		Timestamp: time.Now(),
 		DataType:  "consensus",
 		Data:      msg,
 	}
+	n.messageID+=1
 
 	n.BroadcastMessages <- network_msg
 

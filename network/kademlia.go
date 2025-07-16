@@ -41,13 +41,14 @@ func NewKademlia(ip string, port int) *Kademlia {
 	nodeID := identity.NewNodeID(fmt.Sprintf("%s:%d", ip, port))
 	node := identity.KademliaNode{ID: nodeID, IP: ip, Port: port}
 
+
 	return &Kademlia{
 		node:              node,
 		routingTable:      NewRoutingTable(node),
 		storage:           make(map[string]string),
 		running:           false,
 		seenMessages:      make(map[string]bool),
-		ConsensusMessages: make(chan message.Message, 100),
+		ConsensusMessages: make(chan message.Message, config.GetConfig().ChanelSize),
 	}
 }
 
@@ -190,6 +191,9 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 		kn.messageMutex.Lock()
 		if kn.seenMessages[msg.MessageID] {
 			// Already seen this message, ignore
+			// fmt.Printf("[노드 %s:%d] 브로드캐스트 메시지 수신: '%s' (발신자: %s:%d)\n",
+			// 	kn.node.IP, kn.node.Port, msg.ID, msg.Sender.IP, msg.Sender.Port)
+
 			kn.messageMutex.Unlock()
 			return &message.Message{
 				Type:      message.BROADCAST_ACK,
@@ -699,8 +703,7 @@ func (kn *Kademlia) GetNodeCount() int {
 func (kn *Kademlia) putData(msg message.Message) {
 	switch msg.DataType {
 	case "consensus":
-		// fmt.Printf("[노드 %s:%d] 브로드캐스트 합의 메시지 수신 (발신자: %s:%d)\n",
-		// 	kn.node.IP, kn.node.Port, msg.Sender.IP, msg.Sender.Port)
+		// fmt.Printf("[노드 %s:%d] 브로드캐스트 합ti.IP, msg.Sender.Port)
 		kn.ConsensusMessages <- msg
 	}
 }
