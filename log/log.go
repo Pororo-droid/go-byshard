@@ -113,7 +113,7 @@ func init() {
 // Setup setup log format and output file
 func Setup() {
 	format := stdlog.Ldate | stdlog.Ltime | stdlog.Lmicroseconds | stdlog.Lshortfile
-	fname := fmt.Sprintf("%s.%d.log", filepath.Base(os.Args[0]), os.Getpid())
+	fname := fmt.Sprintf("%s.%d.log", "app", os.Getpid())
 	f, err := os.Create(filepath.Join(log.dir, fname))
 	if err != nil {
 		stdlog.Fatal(err)

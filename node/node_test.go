@@ -29,7 +29,7 @@ func TestPropose(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	node2.consensus.Propose(req_msg)
+	node2.Consensus.Propose(req_msg)
 
 	for {
 

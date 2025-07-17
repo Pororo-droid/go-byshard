@@ -3,6 +3,7 @@ package consensus
 import (
 	"Pororo-droid/go-byshard/config"
 	"Pororo-droid/go-byshard/crypto"
+	"Pororo-droid/go-byshard/log"
 	"Pororo-droid/go-byshard/message"
 	"Pororo-droid/go-byshard/types"
 	"Pororo-droid/go-byshard/utils"
@@ -10,7 +11,6 @@ import (
 	"crypto/elliptic"
 	"encoding/json"
 	"fmt"
-	"log"
 	"reflect"
 	"sync"
 	"time"
@@ -91,12 +91,11 @@ func (n *PBFT) Handle(msg interface{}) {
 		return
 	}
 
-	fmt.Printf("[%s] Unavailabe message\n", n.id)
+	log.Infof("[%s] Unavailabe message\n", n.id)
 }
 
 // ProcessRequest processes a client request (Primary only)
 func (n *PBFT) Propose(req message.Request) {
-	fmt.Println(req)
 	if !n.isPrimary() {
 		return
 	}
@@ -125,20 +124,20 @@ func (n *PBFT) Propose(req message.Request) {
 	// Broadcast to all backup nodes
 	n.Broadcast(preprepare_msg)
 
-	fmt.Printf("[%s] Sent Pre-prepare for sequence %d\n", n.id, n.Sequence)
+	// log.Infof("[%s] Sent Pre-prepare for sequence %d\n", n.id, n.Sequence)
 	n.HandlePreprepare(preprepare_msg)
 }
 
 func (n *PBFT) HandlePreprepare(msg message.Preprepare) {
 	key := fmt.Sprintf("%d-%d", msg.View, msg.Sequence)
 	if _, exists := n.receivedPrepreares[key]; exists {
-		fmt.Printf("[%s] 같은 view-seq에 대해 pre-prepare 수신, msg: %v", n.id, msg)
+		log.Infof("[%s] 같은 view-seq에 대해 pre-prepare 수신, msg: %v", n.id, msg)
 		return
 	}
 
 	// 메시지 검증
 	if msg.View != n.View {
-		fmt.Printf("[%s] View가 일치하지 않음 (현재: %d, 메시지: %d)", n.id, n.View, msg.View)
+		log.Infof("[HandelPreprepare][%s] View가 일치하지 않음 (현재: %d, 메시지: %d)", n.id, n.View, msg.View)
 		return
 	}
 
@@ -146,16 +145,16 @@ func (n *PBFT) HandlePreprepare(msg message.Preprepare) {
 
 	result, err := crypto.ECDSAVerify(*sender_pubKey, utils.ToByte(msg.Request), msg.Digest)
 	if err != nil {
-		fmt.Printf("[Prepare][%s] 메시지 검증 중 에러 발생\n", n.id)
+		log.Infof("[HandelPreprepare][%s] 메시지 검증 중 에러 발생\n", n.id)
 		return
 	}
 
 	if !result {
-		fmt.Printf("[Preprare][%s] 메시지 서명이 일치하지 않음\n", n.id)
+		log.Infof("[HandelPreprepare][%s] 메시지 서명이 일치하지 않음\n", n.id)
 		return
 	}
 
-	fmt.Printf("[Prepare][%s] preprepare 메시지 수신 및 검증 완료 - View: %d, Seq: %d\n",
+	log.Infof("[HandelPreprepare][%s] preprepare 메시지 수신 및 검증 완료 - View: %d, Seq: %d\n",
 		n.id, msg.View, msg.Sequence)
 
 	n.receivedPrepreares[key] = &msg
@@ -163,8 +162,7 @@ func (n *PBFT) HandlePreprepare(msg message.Preprepare) {
 	digest, err := crypto.ECDSASign(n.privateKey, utils.ToByte(msg))
 
 	if err != nil {
-		fmt.Errorf("[%v] Error while signing ECDSA %v", n.id, err)
-		fmt.Printf("[%s] Error while signing ECDSA %s", n.id, err)
+		log.Errorf("[%s] Error while signing ECDSA %s", n.id, err)
 		return
 	}
 
@@ -180,31 +178,31 @@ func (n *PBFT) HandlePreprepare(msg message.Preprepare) {
 	}
 
 	n.Broadcast(prepare_msg)
-	fmt.Printf("[%s] Broadcast Prepare for sequence %d\n", n.id, msg.Sequence)
+	log.Infof("[HandelPreprepare][%s] Broadcast Prepare for sequence %d\n", n.id, msg.Sequence)
 
 	n.HandlePrepare(prepare_msg)
 }
 
 func (n *PBFT) HandlePrepare(msg message.Prepare) {
-	fmt.Printf("[%s] Received Prepare message\n", n.id)
+	log.Infof("[HandelPrepare][%s] Received Prepare message\n", n.id)
 
 	key := fmt.Sprintf("%d-%d", msg.View, msg.Sequence)
 
 	// 메시지 검증
 	if msg.View != n.View {
-		fmt.Printf("[%s] View가 일치하지 않음 (현재: %d, 메시지: %d)", n.id, n.View, msg.View)
+		log.Infof("[%s] View가 일치하지 않음 (현재: %d, 메시지: %d)", n.id, n.View, msg.View)
 		return
 	}
 
 	sender_pubKey := crypto.UncompressedBytesToPublicKey(elliptic.P256(), msg.PublicKey_X, msg.PublicKey_Y)
 	result, err := crypto.ECDSAVerify(*sender_pubKey, utils.ToByte(msg.Preprepare), msg.Digest)
 	if err != nil {
-		fmt.Printf("[HandlePrepare][%s] 메시지 검증 중 에러 발생\n", n.id)
+		log.Infof("[HandlePrepare][%s] 메시지 검증 중 에러 발생\n", n.id)
 		return
 	}
 
 	if !result {
-		fmt.Printf("[Preprare][%s] 메시지 서명이 일치하지 않음\n", n.id)
+		log.Infof("[Preprare][%s] 메시지 서명이 일치하지 않음\n", n.id)
 		return
 	}
 
@@ -212,7 +210,7 @@ func (n *PBFT) HandlePrepare(msg message.Prepare) {
 		for _, prepare := range prepares {
 			prepare_pubKey := crypto.UncompressedBytesToPublicKey(elliptic.P256(), prepare.PublicKey_X, prepare.PublicKey_Y)
 			if prepare_pubKey == sender_pubKey {
-				fmt.Printf("[HandlePrepare][%s] %s 노드로부터 중복 메시지 수신", n.id, sender_pubKey)
+				log.Infof("[HandlePrepare][%s] %s 노드로부터 중복 메시지 수신", n.id, sender_pubKey)
 				return
 			}
 		}
@@ -224,7 +222,7 @@ func (n *PBFT) HandlePrepare(msg message.Prepare) {
 	}
 	n.receivedPrepares[key] = append(n.receivedPrepares[key], &msg)
 
-	log.Printf("[HandlePrepare][%s] prepare 메시지 수신 - View: %d, Seq: %d (총 %d개)\n",
+	log.Infof("[HandlePrepare][%s] prepare 메시지 수신 - View: %d, Seq: %d (총 %d개)\n",
 		n.id, msg.View, msg.Sequence, len(n.receivedPrepares[key]))
 
 	f := (n.CommitteeNum - 1) / 3 // 최대 Byzantine 노드 수
@@ -234,7 +232,7 @@ func (n *PBFT) HandlePrepare(msg message.Prepare) {
 		return
 	}
 
-	fmt.Printf("[HandlePrepare][%s] Prepare phase 완료! (%d/%d 준비 메시지 수집)\n",
+	log.Infof("[HandlePrepare][%s] Prepare phase 완료! (%d/%d 준비 메시지 수집)\n",
 		n.id, len(n.receivedPrepares[key]), requiredPrepares)
 
 	prepare_list := n.receivedPrepares[key]
@@ -242,7 +240,7 @@ func (n *PBFT) HandlePrepare(msg message.Prepare) {
 
 	if err != nil {
 		fmt.Errorf("[%v] Error while signing ECDSA %v", n.id, err)
-		fmt.Printf("[%s] Error while signing ECDSA %s", n.id, err)
+		log.Infof("[%s] Error while signing ECDSA %s", n.id, err)
 		return
 	}
 
@@ -258,42 +256,42 @@ func (n *PBFT) HandlePrepare(msg message.Prepare) {
 	}
 
 	n.Broadcast(prepare_msg)
-	fmt.Printf("[%s] Broadcast Prepare for sequence %d\n", n.id, msg.Sequence)
+	log.Infof("[HandlePrepare][%s] Broadcast Prepare for sequence %d\n", n.id, msg.Sequence)
 
 	n.HandleCommit(prepare_msg)
 }
 
 func (n *PBFT) HandleCommit(msg message.Commit) {
-	fmt.Printf("[%s] Received Commit message\n", n.id)
+	log.Infof("[HandelCommit][%s] Received Commit message\n", n.id)
 
 	key := fmt.Sprintf("%d-%d", msg.View, msg.Sequence)
 
 	// 메시지 검증
 	if msg.View != n.View {
-		fmt.Printf("[%s] View가 일치하지 않음 (현재: %d, 메시지: %d)", n.id, n.View, msg.View)
+		log.Infof("[%s] View가 일치하지 않음 (현재: %d, 메시지: %d)", n.id, n.View, msg.View)
 		return
 	}
 
 	sender_pubKey := crypto.UncompressedBytesToPublicKey(elliptic.P256(), msg.PublicKey_X, msg.PublicKey_Y)
 	result, err := crypto.ECDSAVerify(*sender_pubKey, utils.ToByte(msg.PrepareList), msg.Digest)
 	if err != nil {
-		fmt.Printf("[HandleCommit][%s] 메시지 검증 중 에러 발생\n", n.id)
+		log.Infof("[HandleCommit][%s] 메시지 검증 중 에러 발생\n", n.id)
 		return
 	}
 
 	if !result {
-		fmt.Printf("[HandleCommit][%s] 메시지 서명이 일치하지 않음\n", n.id)
+		log.Infof("[HandleCommit][%s] 메시지 서명이 일치하지 않음\n", n.id)
 		return
 	}
 
 	// PrepareList 서명 검증
-	fmt.Printf("[HandleCommit][%s] Commit 완료\n", n.id)
+	log.Infof("[HandleCommit][%s] Commit 완료\n", n.id)
 	// Prepares 검사
 	if commits, exists := n.receivedCommits[key]; exists {
 		for _, commit := range commits {
 			commit_pubKey := crypto.UncompressedBytesToPublicKey(elliptic.P256(), commit.PublicKey_X, commit.PublicKey_Y)
 			if commit_pubKey == sender_pubKey {
-				fmt.Printf("[HandleCommit][%s] %s 노드로부터 중복 메시지 수신", n.id, sender_pubKey)
+				log.Infof("[HandleCommit][%s] %s 노드로부터 중복 메시지 수신", n.id, sender_pubKey)
 				return
 			}
 		}
@@ -308,14 +306,14 @@ func (n *PBFT) HandleCommit(msg message.Commit) {
 	f := (n.CommitteeNum - 1) / 3 // 최대 Byzantine 노드 수
 	requiredCommits := 2*f + 1
 
-	fmt.Printf("[HandleCommit][%s] Commit 메시지 수신 - View: %d, Seq: %d (총 %d개)\n",
+	log.Infof("[HandleCommit][%s] Commit 메시지 수신 - View: %d, Seq: %d (총 %d개)\n",
 		n.id, msg.View, msg.Sequence, len(n.receivedCommits[key]))
 
 	if len(n.receivedCommits[key]) != requiredCommits {
 		return
 	}
 
-	fmt.Printf("[HandleCommit][%s] Commit 완료\n", n.id)
+	log.Infof("[HandleCommit][%s] Commit 완료\n", n.id)
 
 	// Execute
 }
@@ -368,14 +366,6 @@ func mapToStruct(data map[string]interface{}, result interface{}) error {
 	// 모든 필드가 채워졌는지 검증
 	// return validateAllFieldsFilled(result)
 	return nil
-}
-
-func deepCopyMap(original map[string]interface{}) map[string]interface{} {
-	copied := make(map[string]interface{})
-	for key, value := range original {
-		copied[key] = value
-	}
-	return copied
 }
 
 func checkStruct(a map[string]interface{}, b interface{}) error {

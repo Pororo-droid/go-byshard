@@ -15,8 +15,8 @@ var (
 )
 
 type Config struct {
-	Bootstrap BootstrapConfig `json:"bootstrap"`
-	ChanelSize int `json:"chanel_size"`
+	Bootstrap  BootstrapConfig `json:"bootstrap"`
+	ChanelSize int             `json:"chanel_size"`
 }
 
 type BootstrapConfig struct {
@@ -47,7 +47,7 @@ func GetBootstrapConfig() *BootstrapConfig {
 }
 
 func LoadConfig() (*Config, error) {
-	file, err := os.Open("../config/config.json")
+	file, err := os.Open("./config/config.json")
 	if err != nil {
 		return nil, fmt.Errorf("error while opening json file: %v", err)
 	}

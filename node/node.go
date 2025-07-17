@@ -11,7 +11,7 @@ import (
 type Node struct {
 	privateKey *ecdsa.PrivateKey
 	network    *network.Kademlia
-	consensus  consensus.Consensus
+	Consensus  consensus.Consensus
 }
 
 func NewNode(ip string, port int, alg string) Node {
@@ -30,7 +30,7 @@ func NewNode(ip string, port int, alg string) Node {
 
 	switch alg {
 	case "pbft":
-		node.consensus = consensus.NewPBFT(ip, port, privateKey)
+		node.Consensus = consensus.NewPBFT(ip, port, privateKey)
 	}
 
 	return *node
@@ -40,8 +40,8 @@ func (n *Node) Run() {
 	for {
 		select {
 		case consensus_msg := <-n.network.ConsensusMessages:
-			n.consensus.Handle(consensus_msg.Data)
-		case broadcast_msg := <-n.consensus.GetBroadcastMessages():
+			n.Consensus.Handle(consensus_msg.Data)
+		case broadcast_msg := <-n.Consensus.GetBroadcastMessages():
 			n.network.Broadcast(broadcast_msg)
 		}
 	}
