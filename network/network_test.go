@@ -9,11 +9,11 @@ import (
 
 func TestNetwork(t *testing.T) {
 	// Create multiple nodes
-	node1 := NewKademlia("127.0.0.1", 8001)
-	node2 := NewKademlia("127.0.0.1", 8002)
-	node3 := NewKademlia("127.0.0.1", 8003)
-	node4 := NewKademlia("127.0.0.1", 8004)
-	node5 := NewKademlia("127.0.0.1", 8005)
+	node1 := NewKademlia("127.0.0.1", 8001, 1)
+	node2 := NewKademlia("127.0.0.1", 8002, 1)
+	node3 := NewKademlia("127.0.0.1", 8003, 1)
+	node4 := NewKademlia("127.0.0.1", 8004, 1)
+	node5 := NewKademlia("127.0.0.1", 8005, 1)
 
 	// Start all nodes
 	nodes := []*Kademlia{node1, node2, node3, node4, node5}

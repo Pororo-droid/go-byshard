@@ -9,14 +9,14 @@ import (
 
 func TestPropose(t *testing.T) {
 	// Create multiple nodes
-	node1 := network.NewKademlia("127.0.0.1", 8001)
+	node1 := network.NewKademlia("127.0.0.1", 8001, 1)
 	node1.Start()
 	defer node1.Stop()
 
-	node2 := NewNode("127.0.0.1", 8002, "pbft")
-	node3 := NewNode("127.0.0.1", 8003, "pbft")
-	node4 := NewNode("127.0.0.1", 8004, "pbft")
-	node5 := NewNode("127.0.0.1", 8005, "pbft")
+	node2 := NewNode("127.0.0.1", 8002, "pbft", 1)
+	node3 := NewNode("127.0.0.1", 8003, "pbft", 1)
+	node4 := NewNode("127.0.0.1", 8004, "pbft", 1)
+	node5 := NewNode("127.0.0.1", 8005, "pbft", 1)
 
 	go node2.Run()
 	go node3.Run()

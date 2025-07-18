@@ -14,7 +14,7 @@ type Node struct {
 	Consensus  consensus.Consensus
 }
 
-func NewNode(ip string, port int, alg string) Node {
+func NewNode(ip string, port int, alg string, shard_num int) Node {
 	node := new(Node)
 
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -22,7 +22,7 @@ func NewNode(ip string, port int, alg string) Node {
 		panic(err)
 	}
 
-	network := network.NewKademlia(ip, port)
+	network := network.NewKademlia(ip, port, shard_num)
 	network.Setup()
 
 	node.privateKey = privateKey

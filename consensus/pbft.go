@@ -29,9 +29,11 @@ type PBFT struct {
 	ip   string
 	port int
 
-	View         types.View
-	Sequence     types.Sequence
+	View     types.View
+	Sequence types.Sequence
+
 	CommitteeNum int
+	isPrimary    bool
 
 	privateKey *ecdsa.PrivateKey
 
@@ -51,12 +53,17 @@ func NewPBFT(ip string, port int, private_key *ecdsa.PrivateKey) *PBFT {
 		View:               0,
 		Sequence:           0,
 		CommitteeNum:       4,
+		isPrimary:          false,
 		privateKey:         private_key,
 		BroadcastMessages:  make(chan message.Message, config.GetConfig().ChanelSize),
 		receivedPrepreares: make(map[string]*message.Preprepare),
 		receivedPrepares:   make(map[string][]*message.Prepare),
 		receivedCommits:    make(map[string][]*message.Commit),
 	}
+}
+
+func (n *PBFT) SetToPrimary() {
+	n.isPrimary = true
 }
 
 func (n *PBFT) Handle(msg interface{}) {
@@ -96,7 +103,7 @@ func (n *PBFT) Handle(msg interface{}) {
 
 // ProcessRequest processes a client request (Primary only)
 func (n *PBFT) Propose(req message.Request) {
-	if !n.isPrimary() {
+	if !n.isPrimary {
 		return
 	}
 
@@ -316,13 +323,6 @@ func (n *PBFT) HandleCommit(msg message.Commit) {
 	log.Infof("[HandleCommit][%s] Commit 완료\n", n.id)
 
 	// Execute
-}
-
-func (n *PBFT) isPrimary() bool {
-	if n.port == 8002 {
-		return true
-	}
-	return false
 }
 
 func (n *PBFT) Broadcast(msg interface{}) {

@@ -24,23 +24,35 @@ type Kademlia struct {
 	messageMutex sync.RWMutex    // Mutex for seen messages
 
 	ConsensusMessages chan message.Message
+
+	Bootstrap identity.KademliaNode
 }
 
-func getBootstrap() identity.KademliaNode {
-	var bootstrap identity.KademliaNode
+// func getBootstrap() identity.KademliaNode {
+// 	var bootstrap identity.KademliaNode
 
-	bootstrap.IP = config.GetBootstrapConfig().IP
-	bootstrap.Port = config.GetBootstrapConfig().Port
-	bootstrap.ID = identity.NewNodeID(fmt.Sprintf("%s:%d", bootstrap.IP, bootstrap.Port))
+// 	bootstrap.IP = config.GetBootstrapConfig().IP
+// 	bootstrap.Port = config.GetBootstrapConfig().Port
+// 	bootstrap.ID = identity.NewNodeID(fmt.Sprintf("%s:%d", bootstrap.IP, bootstrap.Port))
 
-	return bootstrap
-}
+// 	return bootstrap
+// }
 
 // NewKademlia creates a new Kademlia Table and connection
-func NewKademlia(ip string, port int) *Kademlia {
+func NewKademlia(ip string, port int, shard_num int) *Kademlia {
 	nodeID := identity.NewNodeID(fmt.Sprintf("%s:%d", ip, port))
 	node := identity.KademliaNode{ID: nodeID, IP: ip, Port: port}
 
+	var bootstrap identity.KademliaNode
+	if shard_num == 1 {
+		bootstrap.IP = config.GetConfig().Shard1.Bootstrap.IP
+		bootstrap.Port = config.GetConfig().Shard1.Bootstrap.Port
+		bootstrap.ID = identity.NewNodeID(fmt.Sprintf("%s:%d", bootstrap.IP, bootstrap.Port))
+	} else if shard_num == 2 {
+		bootstrap.IP = config.GetConfig().Shard2.Bootstrap.IP
+		bootstrap.Port = config.GetConfig().Shard2.Bootstrap.Port
+		bootstrap.ID = identity.NewNodeID(fmt.Sprintf("%s:%d", bootstrap.IP, bootstrap.Port))
+	}
 
 	return &Kademlia{
 		node:              node,
@@ -49,8 +61,19 @@ func NewKademlia(ip string, port int) *Kademlia {
 		running:           false,
 		seenMessages:      make(map[string]bool),
 		ConsensusMessages: make(chan message.Message, config.GetConfig().ChanelSize),
+		Bootstrap:         bootstrap,
 	}
 }
+
+// func getBootstrap() identity.KademliaNode {
+// 	var bootstrap identity.KademliaNode
+
+// 	bootstrap.IP = config.GetBootstrapConfig().IP
+// 	bootstrap.Port = config.GetBootstrapConfig().Port
+// 	bootstrap.ID = identity.NewNodeID(fmt.Sprintf("%s:%d", bootstrap.IP, bootstrap.Port))
+
+// 	return bootstrap
+// }
 
 // Sets Kademlia node
 func (kn *Kademlia) Setup() error {
@@ -58,7 +81,7 @@ func (kn *Kademlia) Setup() error {
 		return err
 	}
 
-	if err := kn.Join(getBootstrap()); err != nil {
+	if err := kn.Join(kn.Bootstrap); err != nil {
 		return err
 	}
 
