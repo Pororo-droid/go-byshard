@@ -43,15 +43,10 @@ func NewKademlia(ip string, port int, shard_num int) *Kademlia {
 	nodeID := identity.NewNodeID(fmt.Sprintf("%s:%d", ip, port))
 	node := identity.KademliaNode{ID: nodeID, IP: ip, Port: port}
 
-	var bootstrap identity.KademliaNode
-	if shard_num == 1 {
-		bootstrap.IP = config.GetConfig().Shard1.Bootstrap.IP
-		bootstrap.Port = config.GetConfig().Shard1.Bootstrap.Port
-		bootstrap.ID = identity.NewNodeID(fmt.Sprintf("%s:%d", bootstrap.IP, bootstrap.Port))
-	} else if shard_num == 2 {
-		bootstrap.IP = config.GetConfig().Shard2.Bootstrap.IP
-		bootstrap.Port = config.GetConfig().Shard2.Bootstrap.Port
-		bootstrap.ID = identity.NewNodeID(fmt.Sprintf("%s:%d", bootstrap.IP, bootstrap.Port))
+	bootstrap := identity.KademliaNode{
+		IP:   config.GetConfig().BootstrapList[shard_num-1].IP,
+		Port: config.GetConfig().BootstrapList[shard_num-1].Port,
+		ID:   identity.NewNodeID(fmt.Sprintf("%s:%d", config.GetConfig().BootstrapList[shard_num-1].IP, config.GetConfig().BootstrapList[shard_num-1].Port)),
 	}
 
 	return &Kademlia{
@@ -233,8 +228,11 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 		// Print received message
 		// fmt.Printf("[노드 %s:%d] 브로드캐스트 메시지 수신: '%s' (발신자: %s:%d)\n",
 		// 	kn.node.IP, kn.node.Port, msg.MessageData, msg.Sender.IP, msg.Sender.Port)
-
-		kn.putData(msg)
+		if kn.node.ID == msg.Sender.ID && kn.node.IP == msg.Sender.IP {
+			fmt.Printf("[%s:%v], [%s:%v]\n", msg.Sender.IP, msg.Sender.Port, kn.node.IP, kn.node.Port)
+		} else {
+			kn.putData(msg)
+		}
 		// Forward to other nodes if TTL > 0
 		if msg.TTL > 0 {
 			go kn.forwardBroadcast(msg)

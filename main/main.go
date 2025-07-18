@@ -27,15 +27,9 @@ func main() {
 }
 
 func Start(ip_list []string, port_list []int, shard_num int) {
-	// Create multiple nodes
-	var node1 *network.Kademlia
-	if shard_num == 1 {
-		node1 = network.NewKademlia(config.GetConfig().Shard1.Bootstrap.IP, config.GetConfig().Shard1.Bootstrap.Port, shard_num)
-	} else if shard_num == 2 {
-		node1 = network.NewKademlia(config.GetConfig().Shard2.Bootstrap.IP, config.GetConfig().Shard2.Bootstrap.Port, shard_num)
-	}
-	node1.Start()
-	defer node1.Stop()
+	bootstrap_node := network.NewKademlia(config.GetConfig().BootstrapList[shard_num-1].IP, config.GetConfig().BootstrapList[shard_num-1].Port, shard_num)
+	bootstrap_node.Start()
+	defer bootstrap_node.Stop()
 
 	nodes := make([]node.Node, len(ip_list))
 

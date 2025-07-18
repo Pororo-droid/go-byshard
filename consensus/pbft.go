@@ -41,8 +41,10 @@ type PBFT struct {
 	messageID          int
 	BroadcastMessages  chan message.Message
 	receivedPrepreares map[string]*message.Preprepare
-	receivedPrepares   map[string][]*message.Prepare
-	receivedCommits    map[string][]*message.Commit
+	receivedPrepares   map[string]map[string]*message.Prepare
+	receivedCommits    map[string]map[string]*message.Commit
+	// receivedPrepares   map[string][]*message.Prepare
+	// receivedCommits    map[string]*message.Commit
 }
 
 func NewPBFT(ip string, port int, private_key *ecdsa.PrivateKey) *PBFT {
@@ -57,8 +59,8 @@ func NewPBFT(ip string, port int, private_key *ecdsa.PrivateKey) *PBFT {
 		privateKey:         private_key,
 		BroadcastMessages:  make(chan message.Message, config.GetConfig().ChanelSize),
 		receivedPrepreares: make(map[string]*message.Preprepare),
-		receivedPrepares:   make(map[string][]*message.Prepare),
-		receivedCommits:    make(map[string][]*message.Commit),
+		receivedPrepares:   make(map[string]map[string]*message.Prepare),
+		receivedCommits:    make(map[string]map[string]*message.Commit),
 	}
 }
 
@@ -131,11 +133,14 @@ func (n *PBFT) Propose(req message.Request) {
 	// Broadcast to all backup nodes
 	n.Broadcast(preprepare_msg)
 
-	// log.Infof("[%s] Sent Pre-prepare for sequence %d\n", n.id, n.Sequence)
-	n.HandlePreprepare(preprepare_msg)
+	log.Infof("[%s] Sent Pre-prepare for sequence %d\n", n.id, n.Sequence)
+	go n.HandlePreprepare(preprepare_msg)
 }
 
 func (n *PBFT) HandlePreprepare(msg message.Preprepare) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	key := fmt.Sprintf("%d-%d", msg.View, msg.Sequence)
 	if _, exists := n.receivedPrepreares[key]; exists {
 		log.Infof("[%s] 같은 view-seq에 대해 pre-prepare 수신, msg: %v", n.id, msg)
@@ -182,16 +187,20 @@ func (n *PBFT) HandlePreprepare(msg message.Preprepare) {
 		Preprepare:  msg,
 		Digest:      digest,
 		Timestamp:   time.Now(),
+		ID:          n.id,
 	}
 
-	n.Broadcast(prepare_msg)
+	go n.Broadcast(prepare_msg)
 	log.Infof("[HandelPreprepare][%s] Broadcast Prepare for sequence %d\n", n.id, msg.Sequence)
 
-	n.HandlePrepare(prepare_msg)
+	go n.HandlePrepare(prepare_msg)
 }
 
 func (n *PBFT) HandlePrepare(msg message.Prepare) {
-	log.Infof("[HandelPrepare][%s] Received Prepare message\n", n.id)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	log.Infof("[HandelPrepare][%s] Received Prepare message from %s\n", n.id, msg.ID)
 
 	key := fmt.Sprintf("%d-%d", msg.View, msg.Sequence)
 
@@ -213,24 +222,30 @@ func (n *PBFT) HandlePrepare(msg message.Prepare) {
 		return
 	}
 
-	if prepares, exists := n.receivedPrepares[key]; exists {
-		for _, prepare := range prepares {
-			prepare_pubKey := crypto.UncompressedBytesToPublicKey(elliptic.P256(), prepare.PublicKey_X, prepare.PublicKey_Y)
-			if prepare_pubKey == sender_pubKey {
-				log.Infof("[HandlePrepare][%s] %s 노드로부터 중복 메시지 수신", n.id, sender_pubKey)
-				return
-			}
-		}
+	// if prepares, exists := n.receivedPrepares[key]; exists {
+	// 	for _, prepare := range prepares {
+	// 		prepare_pubKey := crypto.UncompressedBytesToPublicKey(elliptic.P256(), prepare.PublicKey_X, prepare.PublicKey_Y)
+	// 		if prepare_pubKey == sender_pubKey {
+	// 			log.Infof("[HandlePrepare][%s] %s 노드로부터 중복 메시지 수신", n.id, sender_pubKey)
+	// 			return
+	// 		}
+	// 	}
+	// }
+
+	if _, exists := n.receivedPrepares[key][msg.ID]; exists {
+		log.Infof("[HandlePrepare][%s] %s 노드로부터 중복 메시지 수신", n.id, msg.ID)
+		return
 	}
 
 	// prepare 메시지 저장
 	if n.receivedPrepares[key] == nil {
-		n.receivedPrepares[key] = make([]*message.Prepare, 0)
+		n.receivedPrepares[key] = make(map[string]*message.Prepare, 0)
 	}
-	n.receivedPrepares[key] = append(n.receivedPrepares[key], &msg)
+	// n.receivedPrepares[key] = append(n.receivedPrepares[key], &msg)
+	n.receivedPrepares[key][msg.ID] = &msg
 
-	log.Infof("[HandlePrepare][%s] prepare 메시지 수신 - View: %d, Seq: %d (총 %d개)\n",
-		n.id, msg.View, msg.Sequence, len(n.receivedPrepares[key]))
+	log.Infof("[HandlePrepare][%s] prepare 메시지 수신 from %v- View: %d, Seq: %d (총 %d개)\n",
+		n.id, msg.ID, msg.View, msg.Sequence, len(n.receivedPrepares[key]))
 
 	f := (n.CommitteeNum - 1) / 3 // 최대 Byzantine 노드 수
 	requiredPrepares := 2*f + 1
@@ -242,12 +257,15 @@ func (n *PBFT) HandlePrepare(msg message.Prepare) {
 	log.Infof("[HandlePrepare][%s] Prepare phase 완료! (%d/%d 준비 메시지 수집)\n",
 		n.id, len(n.receivedPrepares[key]), requiredPrepares)
 
-	prepare_list := n.receivedPrepares[key]
+	var prepare_list []*message.Prepare
+	for _, prepare := range n.receivedPrepares[key] {
+		prepare_list = append(prepare_list, prepare)
+	}
+
 	digest, err := crypto.ECDSASign(n.privateKey, utils.ToByte(prepare_list))
 
 	if err != nil {
-		fmt.Errorf("[%v] Error while signing ECDSA %v", n.id, err)
-		log.Infof("[%s] Error while signing ECDSA %s", n.id, err)
+		log.Errorf("[%s] Error while signing ECDSA %s", n.id, err)
 		return
 	}
 
@@ -260,16 +278,20 @@ func (n *PBFT) HandlePrepare(msg message.Prepare) {
 		PrepareList: prepare_list,
 		Digest:      digest,
 		Timestamp:   time.Now(),
+		ID:          n.id,
 	}
 
-	n.Broadcast(prepare_msg)
+	go n.Broadcast(prepare_msg)
 	log.Infof("[HandlePrepare][%s] Broadcast Prepare for sequence %d\n", n.id, msg.Sequence)
 
-	n.HandleCommit(prepare_msg)
+	go n.HandleCommit(prepare_msg)
 }
 
 func (n *PBFT) HandleCommit(msg message.Commit) {
-	log.Infof("[HandelCommit][%s] Received Commit message\n", n.id)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	log.Infof("[HandelCommit][%s] Received Commit message from %s\n", n.id, msg.ID)
 
 	key := fmt.Sprintf("%d-%d", msg.View, msg.Sequence)
 
@@ -292,29 +314,35 @@ func (n *PBFT) HandleCommit(msg message.Commit) {
 	}
 
 	// PrepareList 서명 검증
-	log.Infof("[HandleCommit][%s] Commit 완료\n", n.id)
+
 	// Prepares 검사
-	if commits, exists := n.receivedCommits[key]; exists {
-		for _, commit := range commits {
-			commit_pubKey := crypto.UncompressedBytesToPublicKey(elliptic.P256(), commit.PublicKey_X, commit.PublicKey_Y)
-			if commit_pubKey == sender_pubKey {
-				log.Infof("[HandleCommit][%s] %s 노드로부터 중복 메시지 수신", n.id, sender_pubKey)
-				return
-			}
-		}
+	// if commits, exists := n.receivedCommits[key]; exists {
+	// 	for _, commit := range commits {
+	// 		commit_pubKey := crypto.UncompressedBytesToPublicKey(elliptic.P256(), commit.PublicKey_X, commit.PublicKey_Y)
+	// 		if commit_pubKey == sender_pubKey {
+	// 			log.Infof("[HandleCommit][%s] %s 노드로부터 중복 메시지 수신", n.id, sender_pubKey)
+	// 			return
+	// 		}
+	// 	}
+	// }
+
+	if _, exists := n.receivedCommits[key][msg.ID]; exists {
+		log.Infof("[HandleCommit][%s] %s 노드로부터 중복 메시지 수신", n.id, msg.ID)
+		return
 	}
 
 	// Commit 메시지 저장
 	if n.receivedCommits[key] == nil {
-		n.receivedCommits[key] = make([]*message.Commit, 0)
+		n.receivedCommits[key] = make(map[string]*message.Commit, 0)
 	}
-	n.receivedCommits[key] = append(n.receivedCommits[key], &msg)
+	// n.receivedCommits[key] = append(n.receivedCommits[key], &msg)
+	n.receivedCommits[key][msg.ID] = &msg
 
 	f := (n.CommitteeNum - 1) / 3 // 최대 Byzantine 노드 수
 	requiredCommits := 2*f + 1
 
-	log.Infof("[HandleCommit][%s] Commit 메시지 수신 - View: %d, Seq: %d (총 %d개)\n",
-		n.id, msg.View, msg.Sequence, len(n.receivedCommits[key]))
+	log.Infof("[HandleCommit][%s] Commit 메시지 수신 From %s - View: %d, Seq: %d (총 %d개)\n",
+		n.id, msg.ID, msg.View, msg.Sequence, len(n.receivedCommits[key]))
 
 	if len(n.receivedCommits[key]) != requiredCommits {
 		return

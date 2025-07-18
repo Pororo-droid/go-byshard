@@ -42,6 +42,7 @@ func (n *Node) Run() {
 		case consensus_msg := <-n.network.ConsensusMessages:
 			n.Consensus.Handle(consensus_msg.Data)
 		case broadcast_msg := <-n.Consensus.GetBroadcastMessages():
+			broadcast_msg.Sender = n.network.GetNodeInfo()
 			n.network.Broadcast(broadcast_msg)
 		}
 	}

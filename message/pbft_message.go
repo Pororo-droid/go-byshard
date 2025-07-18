@@ -15,6 +15,9 @@ type Preprepare struct {
 	Request     Request
 	Digest      types.ECDSASignature
 	Timestamp   time.Time
+
+	// For Debug
+	ID string
 }
 
 type Prepare struct {
@@ -26,6 +29,9 @@ type Prepare struct {
 	Preprepare  Preprepare
 	Digest      types.ECDSASignature
 	Timestamp   time.Time
+
+	// For Debug
+	ID string
 }
 
 type Commit struct {
@@ -37,4 +43,7 @@ type Commit struct {
 	PrepareList []*Prepare
 	Digest      types.ECDSASignature
 	Timestamp   time.Time
+
+	// For Debug
+	ID string
 }

@@ -1,15 +1,13 @@
 {
-    "Shard1": {
-        "Bootstrap": {
+    "Bootstraps": [
+        {
             "IP": "127.0.0.1",
             "Port": 8001
-        }
-    },
-    "Shard2": {
-        "Bootstrap": {
+        },
+        {
             "IP": "127.0.0.1",
             "Port": 8006
         }
-    },
+    ],
     "chanel_size": 1000
 }

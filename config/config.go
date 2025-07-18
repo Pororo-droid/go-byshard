@@ -15,9 +15,8 @@ var (
 )
 
 type Config struct {
-	Shard1     ShardConfig `json:"Shard1"`
-	Shard2     ShardConfig `json:"Shard2"`
-	ChanelSize int         `json:"chanel_size"`
+	BootstrapList []BootstrapConfig `json:"Bootstraps"`
+	ChanelSize    int               `json:"chanel_size"`
 	// Bootstrap  BootstrapConfig `json:"bootstrap"`
 }
 
