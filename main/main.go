@@ -19,8 +19,12 @@ func main() {
 	shard2_ip_list := []string{"127.0.0.1", "127.0.0.1", "127.0.0.1", "127.0.0.1"}
 	shard2_port_list := []int{8007, 8008, 8009, 8010}
 
+	shard3_ip_list := []string{"127.0.0.1", "127.0.0.1", "127.0.0.1", "127.0.0.1"}
+	shard3_port_list := []int{8012, 8013, 8014, 8015}
+
 	Start(shard1_ip_list, shard1_port_list, 1)
 	Start(shard2_ip_list, shard2_port_list, 2)
+	Start(shard3_ip_list, shard3_port_list, 3)
 
 	for {
 	}
@@ -42,12 +46,56 @@ func Start(ip_list []string, port_list []int, shard_num int) {
 		go nodes[i].Run()
 	}
 
-	req_msg := message.Request{
-		ClientID:  1,
-		Operation: "test",
-		Timestamp: time.Now(),
-	}
+	// req_msg := message.Request{
+	// 	ClientID:  1,
+	// 	Operation: "test",
+	// 	Timestamp: time.Now(),
+	// }
 
 	nodes[0].Consensus.SetToPrimary()
-	nodes[0].Consensus.Propose(req_msg)
+	// nodes[0].Consensus.Propose(req_msg)
+
+	shard_req := message.ShardRequest{
+		Votes: []message.Request{
+			message.Request{
+				ClientID:  1,
+				Operation: "Sub",
+				Target:    "Ana",
+				Amount:    400,
+				Condition: 500,
+				Timestamp: time.Now(),
+			},
+			message.Request{
+				ClientID:  1,
+				Operation: "Sub",
+				Target:    "Bo",
+				Amount:    100,
+				Condition: 200,
+				Timestamp: time.Now(),
+			},
+		}, Commits: []message.Request{
+			message.Request{
+				ClientID:  1,
+				Operation: "Add",
+				Target:    "Carol",
+				Amount:    500,
+				Condition: 0,
+				Timestamp: time.Now(),
+			},
+		}, Aborts: []message.Request{
+			message.Request{
+				ClientID:  1,
+				Operation: "Add",
+				Target:    "Ana",
+				Amount:    400,
+				Condition: 0,
+				Timestamp: time.Now(),
+			},
+		},
+	}
+
+	nodes[0].Shard.SetToPrimary()
+	if shard_num == 1 {
+		nodes[0].Shard.Propose(shard_req)
+	}
 }

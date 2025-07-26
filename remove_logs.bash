@@ -1,1 +1,1 @@
-rm -rf *.log
+rm -r ./main/*.log

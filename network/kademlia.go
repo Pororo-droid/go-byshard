@@ -3,6 +3,7 @@ package network
 import (
 	"Pororo-droid/go-byshard/config"
 	"Pororo-droid/go-byshard/identity"
+	"Pororo-droid/go-byshard/log"
 	"Pororo-droid/go-byshard/message"
 	"encoding/json"
 	"fmt"
@@ -24,6 +25,7 @@ type Kademlia struct {
 	messageMutex sync.RWMutex    // Mutex for seen messages
 
 	ConsensusMessages chan message.Message
+	ShardMessages     chan message.Message
 
 	Bootstrap identity.KademliaNode
 }
@@ -56,6 +58,7 @@ func NewKademlia(ip string, port int, shard_num int) *Kademlia {
 		running:           false,
 		seenMessages:      make(map[string]bool),
 		ConsensusMessages: make(chan message.Message, config.GetConfig().ChanelSize),
+		ShardMessages:     make(chan message.Message, config.GetConfig().ChanelSize),
 		Bootstrap:         bootstrap,
 	}
 }
@@ -227,12 +230,8 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 
 		// Print received message
 		// fmt.Printf("[노드 %s:%d] 브로드캐스트 메시지 수신: '%s' (발신자: %s:%d)\n",
-		// 	kn.node.IP, kn.node.Port, msg.MessageData, msg.Sender.IP, msg.Sender.Port)
-		if kn.node.ID == msg.Sender.ID && kn.node.IP == msg.Sender.IP {
-			fmt.Printf("[%s:%v], [%s:%v]\n", msg.Sender.IP, msg.Sender.Port, kn.node.IP, kn.node.Port)
-		} else {
-			kn.putData(msg)
-		}
+		// 	kn.node.IP, kn.node.Port, msg.MessageData, msg.Sender.IP, msg.Sender.Port)\
+		kn.putData(msg)
 		// Forward to other nodes if TTL > 0
 		if msg.TTL > 0 {
 			go kn.forwardBroadcast(msg)
@@ -726,5 +725,11 @@ func (kn *Kademlia) putData(msg message.Message) {
 	case "consensus":
 		// fmt.Printf("[노드 %s:%d] 브로드캐스트 합ti.IP, msg.Sender.Port)
 		kn.ConsensusMessages <- msg
+	case "shard":
+		kn.ShardMessages <- msg
 	}
+}
+
+func (kn *Kademlia) BroadcastToShard(msg message.ShardMessage) {
+	log.Infof("Sending Message to %v shard, Message: %v", msg.TargetShard, msg.Message)
 }

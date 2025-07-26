@@ -2,6 +2,9 @@ package message
 
 import (
 	"Pororo-droid/go-byshard/identity"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"time"
 )
 
@@ -42,9 +45,34 @@ type Message struct {
 	Data        interface{}
 }
 
+// ShardMessage represents a Kademlia protocol message for Sharding
+type ShardMessage struct {
+	TargetShard int
+	Message     Request
+}
+
 // Request represents a client request
 type Request struct {
 	ClientID  int       `json:"client_id"`
 	Operation string    `json:"operation"`
+	Target    string    `json: "target"`
+	Amount    int       `json:"amount"`
+	Condition int       `json:"condition"`
 	Timestamp time.Time `json:"timestamp"`
+}
+
+func (r Request) GetID() string {
+	data, err := json.Marshal(r)
+	if err != nil {
+		return ""
+	}
+
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
+}
+
+type ShardRequest struct {
+	Votes   []Request
+	Commits []Request
+	Aborts  []Request
 }

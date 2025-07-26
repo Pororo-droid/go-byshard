@@ -3,15 +3,14 @@ package consensus
 import (
 	"Pororo-droid/go-byshard/config"
 	"Pororo-droid/go-byshard/crypto"
+	"Pororo-droid/go-byshard/db"
 	"Pororo-droid/go-byshard/log"
 	"Pororo-droid/go-byshard/message"
 	"Pororo-droid/go-byshard/types"
 	"Pororo-droid/go-byshard/utils"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -37,30 +36,37 @@ type PBFT struct {
 
 	privateKey *ecdsa.PrivateKey
 
-	mu                 sync.Mutex
-	messageID          int
-	BroadcastMessages  chan message.Message
-	receivedPrepreares map[string]*message.Preprepare
-	receivedPrepares   map[string]map[string]*message.Prepare
-	receivedCommits    map[string]map[string]*message.Commit
+	mu                  *sync.Mutex
+	messageID           int
+	BroadcastMessages   chan message.Message
+	receivedPreprepares map[string]*message.Preprepare
+	receivedPrepares    map[string]map[string]*message.Prepare
+	receivedCommits     map[string]map[string]*message.Commit
 	// receivedPrepares   map[string][]*message.Prepare
 	// receivedCommits    map[string]*message.Commit
+
+	stateDB db.DB
+
+	forward chan message.ConsenusResult
 }
 
-func NewPBFT(ip string, port int, private_key *ecdsa.PrivateKey) *PBFT {
+func NewPBFT(ip string, port int, private_key *ecdsa.PrivateKey, stateDB db.DB) *PBFT {
 	return &PBFT{
-		id:                 fmt.Sprintf("%s-%d", ip, port),
-		ip:                 ip,
-		port:               port,
-		View:               0,
-		Sequence:           0,
-		CommitteeNum:       4,
-		isPrimary:          false,
-		privateKey:         private_key,
-		BroadcastMessages:  make(chan message.Message, config.GetConfig().ChanelSize),
-		receivedPrepreares: make(map[string]*message.Preprepare),
-		receivedPrepares:   make(map[string]map[string]*message.Prepare),
-		receivedCommits:    make(map[string]map[string]*message.Commit),
+		id:                  fmt.Sprintf("%s-%d", ip, port),
+		ip:                  ip,
+		port:                port,
+		View:                0,
+		Sequence:            0,
+		CommitteeNum:        4,
+		isPrimary:           false,
+		privateKey:          private_key,
+		BroadcastMessages:   make(chan message.Message, config.GetConfig().ChanelSize),
+		receivedPreprepares: make(map[string]*message.Preprepare),
+		receivedPrepares:    make(map[string]map[string]*message.Prepare),
+		receivedCommits:     make(map[string]map[string]*message.Commit),
+		mu:                  new(sync.Mutex),
+		stateDB:             stateDB,
+		forward:             make(chan message.ConsenusResult, config.GetConfig().ChanelSize),
 	}
 }
 
@@ -71,7 +77,7 @@ func (n *PBFT) SetToPrimary() {
 func (n *PBFT) Handle(msg interface{}) {
 	map_data, ok := msg.(map[string]interface{})
 	if !ok {
-		fmt.Println("형변환 시도 중 에러 발생")
+		fmt.Println("형변환 시도 중 에러 발생", msg)
 		return
 	}
 
@@ -80,22 +86,22 @@ func (n *PBFT) Handle(msg interface{}) {
 	var prepare_msg message.Prepare
 	var commit_msg message.Commit
 
-	if err := mapToStruct(map_data, &request_msg); err == nil {
+	if err := utils.MapToStruct(map_data, &request_msg); err == nil {
 		n.Propose(request_msg)
 		return
 	}
 
-	if err := mapToStruct(map_data, &preprepare_msg); err == nil {
+	if err := utils.MapToStruct(map_data, &preprepare_msg); err == nil {
 		n.HandlePreprepare(preprepare_msg)
 		return
 	}
 
-	if err := mapToStruct(map_data, &prepare_msg); err == nil {
+	if err := utils.MapToStruct(map_data, &prepare_msg); err == nil {
 		n.HandlePrepare(prepare_msg)
 		return
 	}
 
-	if err := mapToStruct(map_data, &commit_msg); err == nil {
+	if err := utils.MapToStruct(map_data, &commit_msg); err == nil {
 		n.HandleCommit(commit_msg)
 		return
 	}
@@ -142,7 +148,7 @@ func (n *PBFT) HandlePreprepare(msg message.Preprepare) {
 	defer n.mu.Unlock()
 
 	key := fmt.Sprintf("%d-%d", msg.View, msg.Sequence)
-	if _, exists := n.receivedPrepreares[key]; exists {
+	if _, exists := n.receivedPreprepares[key]; exists {
 		log.Infof("[%s] 같은 view-seq에 대해 pre-prepare 수신, msg: %v", n.id, msg)
 		return
 	}
@@ -169,7 +175,7 @@ func (n *PBFT) HandlePreprepare(msg message.Preprepare) {
 	log.Infof("[HandelPreprepare][%s] preprepare 메시지 수신 및 검증 완료 - View: %d, Seq: %d\n",
 		n.id, msg.View, msg.Sequence)
 
-	n.receivedPrepreares[key] = &msg
+	n.receivedPreprepares[key] = &msg
 
 	digest, err := crypto.ECDSASign(n.privateKey, utils.ToByte(msg))
 
@@ -221,16 +227,6 @@ func (n *PBFT) HandlePrepare(msg message.Prepare) {
 		log.Infof("[Preprare][%s] 메시지 서명이 일치하지 않음\n", n.id)
 		return
 	}
-
-	// if prepares, exists := n.receivedPrepares[key]; exists {
-	// 	for _, prepare := range prepares {
-	// 		prepare_pubKey := crypto.UncompressedBytesToPublicKey(elliptic.P256(), prepare.PublicKey_X, prepare.PublicKey_Y)
-	// 		if prepare_pubKey == sender_pubKey {
-	// 			log.Infof("[HandlePrepare][%s] %s 노드로부터 중복 메시지 수신", n.id, sender_pubKey)
-	// 			return
-	// 		}
-	// 	}
-	// }
 
 	if _, exists := n.receivedPrepares[key][msg.ID]; exists {
 		log.Infof("[HandlePrepare][%s] %s 노드로부터 중복 메시지 수신", n.id, msg.ID)
@@ -351,6 +347,7 @@ func (n *PBFT) HandleCommit(msg message.Commit) {
 	log.Infof("[HandleCommit][%s] Commit 완료\n", n.id)
 
 	// Execute
+	n.execute(key)
 }
 
 func (n *PBFT) Broadcast(msg interface{}) {
@@ -371,49 +368,40 @@ func (n *PBFT) GetBroadcastMessages() chan message.Message {
 	return n.BroadcastMessages
 }
 
-func mapToStruct(data map[string]interface{}, result interface{}) error {
-	if err := checkStruct(data, result); err != nil {
-		return err
-	}
-	// map을 JSON으로 변환
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return err
+// execute를 언제할지, 그리고 abort시 어떤 정보들을 보내야하는지 고안 필요
+func (n *PBFT) execute(key string) {
+	preprepare := n.receivedPreprepares[key]
+	request := preprepare.Request
+
+	var result message.ConsenusResult
+	result.Request = request
+
+	if _, exists := n.stateDB[request.Target]; !exists {
+		n.stateDB[request.Target] = 0
 	}
 
-	// JSON을 struct로 변환
-	if err := json.Unmarshal(jsonData, result); err != nil {
-		return err
+	// Condition is more than.... need to fix
+	// 우선은 무조건 통과하게 만듦.., (commit-vote 구현 중....)
+	// if n.stateDB[request.Target] > request.Condition {
+	// 	// ABORT
+	// 	result.Result = "abort-vote"
+	// 	n.forward <- result
+	// 	return
+	// }
+
+	switch request.Operation {
+	case "Add":
+		n.stateDB[request.Target] += request.Amount
+	case "Sub":
+		n.stateDB[request.Target] -= request.Amount
 	}
 
-	t := reflect.TypeOf(result)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-
-	// 모든 필드가 채워졌는지 검증
-	// return validateAllFieldsFilled(result)
-	return nil
+	// Continue
+	log.Infof("[Execute][%v] Commit-Vote", n.id)
+	result.Result = "commit-vote"
+	n.forward <- result
 }
 
-func checkStruct(a map[string]interface{}, b interface{}) error {
-	t := reflect.TypeOf(b)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-
-	for i := 0; i < t.NumField(); i++ {
-		var is_included bool = false
-		for k, _ := range a {
-			if k == t.Field(i).Name {
-				is_included = true
-			}
-		}
-
-		if !is_included {
-			return fmt.Errorf("구조체가 일치하지 않습니다.")
-		}
-	}
-
-	return nil
+func (n *PBFT) GetConsensusResults() chan message.ConsenusResult {
+	return n.forward
 }

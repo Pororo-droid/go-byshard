@@ -7,4 +7,5 @@ type Consensus interface {
 	SetToPrimary()
 	Handle(interface{})
 	GetBroadcastMessages() chan message.Message
+	GetConsensusResults() chan message.ConsenusResult
 }
