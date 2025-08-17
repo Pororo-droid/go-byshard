@@ -33,7 +33,7 @@ func main() {
 func Start(ip_list []string, port_list []int, shard_num int) {
 	bootstrap_node := network.NewKademlia(config.GetConfig().BootstrapList[shard_num-1].IP, config.GetConfig().BootstrapList[shard_num-1].Port, shard_num)
 	bootstrap_node.Start()
-	defer bootstrap_node.Stop()
+	// defer bootstrap_node.Stop()
 
 	nodes := make([]node.Node, len(ip_list))
 
