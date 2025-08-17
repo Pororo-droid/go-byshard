@@ -25,6 +25,8 @@ const (
 	STORE_RESPONSE
 	BROADCAST
 	BROADCAST_ACK
+	LEAVE
+	LEAVE_ACK
 )
 
 // Message represents a Kademlia protocol message
@@ -43,6 +45,9 @@ type Message struct {
 	SeenBy      []identity.KademliaNodeID `json:"seen_by,omitempty"`      // Nodes that have seen this message
 	DataType    string
 	Data        interface{}
+
+	// 메시지가 향할 Shard 번호
+	Shard       int
 }
 
 // ShardMessage represents a Kademlia protocol message for Sharding
@@ -55,7 +60,7 @@ type ShardMessage struct {
 type Request struct {
 	ClientID  int       `json:"client_id"`
 	Operation string    `json:"operation"`
-	Target    string    `json: "target"`
+	Target    string    `json:"target"`
 	Amount    int       `json:"amount"`
 	Condition int       `json:"condition"`
 	Timestamp time.Time `json:"timestamp"`

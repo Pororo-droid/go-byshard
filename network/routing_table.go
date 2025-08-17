@@ -97,3 +97,13 @@ func (rt *RoutingTable) FindClosestNodes(target identity.KademliaNodeID, k int) 
 
 	return result
 }
+
+// RemoveContact removes a contact from the routing table
+func (rt *RoutingTable) RemoveContact(nodeID identity.KademliaNodeID) {
+	if nodeID == rt.localNode.ID {
+		return
+	}
+
+	bucketIndex := rt.getBucketIndex(nodeID)
+	rt.buckets[bucketIndex].RemoveContact(nodeID)
+}
