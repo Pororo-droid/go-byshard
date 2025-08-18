@@ -276,8 +276,7 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 
 	case message.LEAVE:
 		// Handle leave message - remove the sender from our routing table
-		log.Infof("Node %s:%d received leave notification from %s:%d",
-			kn.node.IP, kn.node.Port, msg.Sender.IP, msg.Sender.Port)
+		// log.Infof("Node %s:%d received leave notification from %s:%d", kn.node.IP, kn.node.Port, msg.Sender.IP, msg.Sender.Port)
 
 		// kn.routingTable.RemoveContact(msg.Sender.ID)
 		kn.routingTable[msg.Shard].RemoveContact(msg.Sender.ID)
@@ -404,11 +403,8 @@ func (kn *Kademlia) Join(shard_num int) error {
 	// fmt.printf("[노드 %s:%d] bootstrap에게 근처 노드들 요청\n", kn.node.IP, kn.node.Port)
 	nearbyNodes, err := kn.FindNode(kn.node.ID, shard_num)
 	if err != nil {
-		// fmt.printf("[노드 %s:%d] bootstrap으로부터 근처 노드 찾기 실패: %v\n",
-		//	kn.node.IP, kn.node.Port, err)
-	} else {
-		// fmt.printf("[노드 %s:%d] bootstrap으로부터 %d개 노드 정보 받음\n",
-		//	kn.node.IP, kn.node.Port, len(nearbyNodes))
+		return fmt.Errorf("[노드 %s:%d] bootstrap으로부터 근처 노드 찾기 실패: %v",
+			kn.node.IP, kn.node.Port, err)
 	}
 
 	// Step 4: Connect to all nodes returned by bootstrap
@@ -423,11 +419,9 @@ func (kn *Kademlia) Join(shard_num int) error {
 
 		// Try to ping each node
 		if err := kn.Ping(node, shard_num); err != nil {
-			// fmt.printf("[노드 %s:%d] %s:%d 연결 실패: %v\n",
-			//	kn.node.IP, kn.node.Port, node.IP, node.Port, err)
+			return fmt.Errorf("[노드 %s:%d] %s:%d 연결 실패: %v",
+				kn.node.IP, kn.node.Port, node.IP, node.Port, err)
 		} else {
-			// fmt.printf("[노드 %s:%d] %s:%d 연결 성공\n",
-			//	kn.node.IP, kn.node.Port, node.IP, node.Port)
 			connectedCount++
 		}
 	}
@@ -435,75 +429,18 @@ func (kn *Kademlia) Join(shard_num int) error {
 	// Step 5: Perform iterative node lookup to discover more nodes
 	// fmt.Printf("[노드 %s:%d] 반복적 노드 탐색 시작\n", kn.node.IP, kn.node.Port)
 	if err := kn.performIterativeNodeLookup(shard_num); err != nil {
-		//fmt.printf("[노드 %s:%d] 반복적 노드 탐색 실패: %v\n",
-		//	kn.node.IP, kn.node.Port, err)
+		return fmt.Errorf("[노드 %s:%d] 반복적 노드 탐색 실패: %v",
+			kn.node.IP, kn.node.Port, err)
 	}
 
 	// totalConnected := kn.GetNodeCount()
 	// fmt.Printf("[노드 %s:%d] 네트워크 참여 완료 - 총 %d개 노드 연결\n",
 	// 	kn.node.IP, kn.node.Port, totalConnected)
 
+	// log.Infof("[%v:%v]Join completed to %v shard, connected node on shard num: %v, shard: %v", kn.node.IP, kn.node.Port, shard_num, len(kn.GetConnectedNodes(shard_num)), kn.GetConnectedNodes(shard_num))
+
 	return nil
 }
-
-// // Join joins the Kademlia network through a bootstrap node
-// func (kn *Kademlia) Join(bootstrap identity.KademliaNode) error {
-// 	// fmt.printf("[노드 %s:%d] 네트워크 참여 시작 - bootstrap: %s:%d\n",
-// 	//	 kn.node.IP, kn.node.Port, bootstrap.IP, bootstrap.Port)
-
-// 	// Step 1: Add bootstrap node to routing table
-// 	kn.routingTable.AddContact(bootstrap)
-
-// 	// Step 2: Ping bootstrap node to establish connection
-// 	if err := kn.Ping(bootstrap); err != nil {
-// 		return fmt.Errorf("failed to ping bootstrap node: %v", err)
-// 	}
-
-// 	// Step 3: Ask bootstrap for nodes close to our ID
-// 	// fmt.printf("[노드 %s:%d] bootstrap에게 근처 노드들 요청\n", kn.node.IP, kn.node.Port)
-// 	nearbyNodes, err := kn.FindNode(kn.node.ID)
-// 	if err != nil {
-// 		// fmt.printf("[노드 %s:%d] bootstrap으로부터 근처 노드 찾기 실패: %v\n",
-// 		//	kn.node.IP, kn.node.Port, err)
-// 	} else {
-// 		// fmt.printf("[노드 %s:%d] bootstrap으로부터 %d개 노드 정보 받음\n",
-// 		//	kn.node.IP, kn.node.Port, len(nearbyNodes))
-// 	}
-
-// 	// Step 4: Connect to all nodes returned by bootstrap
-// 	connectedCount := 0
-// 	for _, node := range nearbyNodes {
-// 		if node.ID == kn.node.ID {
-// 			continue // Skip ourselves
-// 		}
-
-// 		// Add to routing table
-// 		kn.routingTable.AddContact(node)
-
-// 		// Try to ping each node
-// 		if err := kn.Ping(node); err != nil {
-// 			// fmt.printf("[노드 %s:%d] %s:%d 연결 실패: %v\n",
-// 			//	kn.node.IP, kn.node.Port, node.IP, node.Port, err)
-// 		} else {
-// 			// fmt.printf("[노드 %s:%d] %s:%d 연결 성공\n",
-// 			//	kn.node.IP, kn.node.Port, node.IP, node.Port)
-// 			connectedCount++
-// 		}
-// 	}
-
-// 	// Step 5: Perform iterative node lookup to discover more nodes
-// 	// fmt.Printf("[노드 %s:%d] 반복적 노드 탐색 시작\n", kn.node.IP, kn.node.Port)
-// 	if err := kn.performIterativeNodeLookup(); err != nil {
-// 		//fmt.printf("[노드 %s:%d] 반복적 노드 탐색 실패: %v\n",
-// 		//	kn.node.IP, kn.node.Port, err)
-// 	}
-
-// 	// totalConnected := kn.GetNodeCount()
-// 	// fmt.Printf("[노드 %s:%d] 네트워크 참여 완료 - 총 %d개 노드 연결\n",
-// 	// 	kn.node.IP, kn.node.Port, totalConnected)
-
-// 	return nil
-// }
 
 // GetID returns the node's ID
 func (kn *Kademlia) GetID() identity.KademliaNodeID {
@@ -783,8 +720,10 @@ func (kn *Kademlia) putData(msg message.Message) {
 func (kn *Kademlia) BroadcastToShard(msg message.ShardMessage) {
 	log.Infof("Sending Message to %v shard, Message: %v", msg.TargetShard, msg.Message)
 
-	kn.Join(msg.TargetShard)
-	log.Infof("[%v:%v]Join completed to %v shard, Message: %v connected node on shard: %v", kn.node.IP, kn.node.Port, msg.TargetShard, msg.Message, kn.GetConnectedNodes(msg.TargetShard))
+	if err := kn.Join(msg.TargetShard); err != nil {
+		log.Errorf("[%v:%v] error while joining to target shard %v, err: %v ", kn.node.IP, kn.node.Port, msg.TargetShard, err)
+		return
+	}
 
 	broadcast_msg := message.Message{
 		ID:        fmt.Sprintf("broadcast-%s-%d", kn.node.ID.String()[:8], time.Now().UnixNano()),
@@ -796,11 +735,13 @@ func (kn *Kademlia) BroadcastToShard(msg message.ShardMessage) {
 		Shard:     msg.TargetShard,
 	}
 	kn.Broadcast(broadcast_msg)
+
+	kn.Leave(msg.TargetShard)
 }
 
 // Leave gracefully leaves the Kademlia network
 func (kn *Kademlia) Leave(shard_num int) error {
-	log.Infof("Node %s:%d is leaving the shard network %v", kn.node.IP, kn.node.Port, shard_num)
+	// log.Infof("Node %s:%d is leaving the shard network %v", kn.node.IP, kn.node.Port, shard_num)
 
 	// Notify all connected nodes that we are leaving
 	leaveMsg := message.Message{
@@ -830,8 +771,7 @@ func (kn *Kademlia) Leave(shard_num int) error {
 			}
 
 			if response.Type == message.LEAVE_ACK {
-				log.Debugf("Received leave acknowledgment from %s:%d",
-					targetNode.IP, targetNode.Port)
+				// log.Debugf("Received leave acknowledgment from %s:%d",targetNode.IP, targetNode.Port)
 			}
 		}(node)
 		successCount++
@@ -844,20 +784,20 @@ func (kn *Kademlia) Leave(shard_num int) error {
 	kn.routingTable[shard_num] = NewRoutingTable(kn.node)
 
 	// Clear local storage (optional - depends on requirements)
-	kn.mutex.Lock()
-	kn.storage = make(map[string]string)
-	kn.mutex.Unlock()
+	// kn.mutex.Lock()
+	// kn.storage = make(map[string]string)
+	// kn.mutex.Unlock()
 
 	// Clear seen messages
-	kn.messageMutex.Lock()
-	kn.seenMessages = make(map[string]bool)
-	kn.messageMutex.Unlock()
+	// kn.messageMutex.Lock()
+	// kn.seenMessages = make(map[string]bool)
+	// kn.messageMutex.Unlock()
 
 	// Stop the node
-	kn.Stop()
+	// kn.Stop()
 
-	log.Infof("Node %s:%d has left the network (notified %d nodes)",
-		kn.node.IP, kn.node.Port, successCount)
+	// log.Infof("Node %s:%d has left the network (notified %d nodes)",
+	// 	kn.node.IP, kn.node.Port, successCount)
 
 	return nil
 }

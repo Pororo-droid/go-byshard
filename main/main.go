@@ -22,15 +22,18 @@ func main() {
 	shard3_ip_list := []string{"127.0.0.1", "127.0.0.1", "127.0.0.1", "127.0.0.1"}
 	shard3_port_list := []int{8012, 8013, 8014, 8015}
 
-	Start(shard1_ip_list, shard1_port_list, 1)
-	Start(shard2_ip_list, shard2_port_list, 2)
-	Start(shard3_ip_list, shard3_port_list, 3)
+	var nodes_list [][]node.Node
 
+	nodes_list = append(nodes_list, Start(shard1_ip_list, shard1_port_list, 1))
+	nodes_list = append(nodes_list, Start(shard2_ip_list, shard2_port_list, 2))
+	nodes_list = append(nodes_list, Start(shard3_ip_list, shard3_port_list, 3))
+
+	propose(nodes_list[0])
 	for {
 	}
 }
 
-func Start(ip_list []string, port_list []int, shard_num int) {
+func Start(ip_list []string, port_list []int, shard_num int) []node.Node {
 	bootstrap_node := network.NewKademlia(config.GetConfig().BootstrapList[shard_num-1].IP, config.GetConfig().BootstrapList[shard_num-1].Port, shard_num)
 	bootstrap_node.Start()
 	// defer bootstrap_node.Stop()
@@ -54,7 +57,12 @@ func Start(ip_list []string, port_list []int, shard_num int) {
 
 	nodes[0].Consensus.SetToPrimary()
 	// nodes[0].Consensus.Propose(req_msg)
+	nodes[0].Shard.SetToPrimary()
 
+	return nodes
+}
+
+func propose(nodes []node.Node) {
 	shard_req := message.ShardRequest{
 		Votes: []message.Request{
 			message.Request{
@@ -94,8 +102,5 @@ func Start(ip_list []string, port_list []int, shard_num int) {
 		},
 	}
 
-	nodes[0].Shard.SetToPrimary()
-	if shard_num == 1 {
-		nodes[0].Shard.Propose(shard_req)
-	}
+	nodes[0].Shard.Propose(shard_req)
 }
