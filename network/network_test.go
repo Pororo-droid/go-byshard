@@ -33,7 +33,7 @@ func TestNetwork(t *testing.T) {
 
 	// Node2 joins through node1 (bootstrap)
 	fmt.Println("\n--- 노드2가 노드1을 통해 네트워크 참여 ---")
-	if err := node2.Join(node1.GetNodeInfo()); err != nil {
+	if err := node2.Join(1); err != nil {
 		fmt.Printf("Error node2 joining network: %v\n", err)
 		return
 	}
@@ -41,7 +41,7 @@ func TestNetwork(t *testing.T) {
 
 	// Node3 joins through node1 (should get introduced to node2)
 	fmt.Println("\n--- 노드3이 노드1을 통해 네트워크 참여 ---")
-	if err := node3.Join(node1.GetNodeInfo()); err != nil {
+	if err := node3.Join(1); err != nil {
 		fmt.Printf("Error node3 joining network: %v\n", err)
 		return
 	}
@@ -49,7 +49,7 @@ func TestNetwork(t *testing.T) {
 
 	// Node4 joins through node2 (should get introduced to node1 and node3)
 	fmt.Println("\n--- 노드4가 노드2를 통해 네트워크 참여 ---")
-	if err := node4.Join(node2.GetNodeInfo()); err != nil {
+	if err := node4.Join(1); err != nil {
 		fmt.Printf("Error node4 joining network: %v\n", err)
 		return
 	}
@@ -57,7 +57,7 @@ func TestNetwork(t *testing.T) {
 
 	// Node5 joins through node3 (should get introduced to all others)
 	fmt.Println("\n--- 노드5가 노드3을 통해 네트워크 참여 ---")
-	if err := node5.Join(node3.GetNodeInfo()); err != nil {
+	if err := node5.Join(1); err != nil {
 		fmt.Printf("Error node5 joining network: %v\n", err)
 		return
 	}
@@ -66,7 +66,7 @@ func TestNetwork(t *testing.T) {
 	// Print final network topology
 	fmt.Println("\n=== 최종 네트워크 토폴로지 ===")
 	for i, node := range nodes {
-		connectedNodes := node.GetConnectedNodes()
+		connectedNodes := node.GetConnectedNodes(1)
 		fmt.Printf("노드 %d (포트 %d): %d개 노드 연결", i+1, 8001+i, len(connectedNodes))
 		if len(connectedNodes) > 0 {
 			fmt.Printf(" -> 연결된 포트들: ")
@@ -78,23 +78,6 @@ func TestNetwork(t *testing.T) {
 			}
 		}
 		fmt.Println()
-	}
-
-	// Store a value from node1
-	fmt.Println("\n=== 값 저장 및 검색 테스트 ===")
-	if err := node1.Store("hello", "world from distributed network"); err != nil {
-		fmt.Printf("Error storing value: %v\n", err)
-		return
-	}
-	fmt.Println("노드1에서 'hello' -> 'world from distributed network' 저장 완료")
-
-	// Try to find the value from node5 (should work through the network)
-	fmt.Println("\n--- 노드5에서 값 검색 ---")
-	value, err := node5.FindValue("hello")
-	if err != nil {
-		fmt.Printf("노드5에서 값 검색 실패: %v\n", err)
-	} else {
-		fmt.Printf("노드5에서 'hello' 검색 결과: %s\n", value)
 	}
 
 	// Test broadcast functionality

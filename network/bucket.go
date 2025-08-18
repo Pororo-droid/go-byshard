@@ -1,6 +1,7 @@
 package network
 
 import (
+	"Pororo-droid/go-byshard/identity"
 	"sync"
 	"time"
 )
@@ -63,4 +64,18 @@ func (b *Bucket) GetContacts() []Contact {
 	contacts := make([]Contact, len(b.contacts))
 	copy(contacts, b.contacts)
 	return contacts
+}
+
+// RemoveContact removes a contact from the bucket
+func (b *Bucket) RemoveContact(nodeID identity.KademliaNodeID) bool {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	for i, contact := range b.contacts {
+		if contact.Node.ID == nodeID {
+			b.contacts = append(b.contacts[:i], b.contacts[i+1:]...)
+			return true
+		}
+	}
+	return false
 }

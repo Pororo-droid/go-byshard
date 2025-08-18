@@ -22,6 +22,8 @@ type Linear struct {
 	// messages []message.ShardRequest
 
 	mu *sync.Mutex
+
+	shardNum int
 }
 
 func NewLinear(ip string, port int) *Linear {
