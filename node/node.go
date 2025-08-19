@@ -57,7 +57,9 @@ func (n *Node) Run() {
 			n.Shard.HandleConsensusResult(forward_msg)
 		case broadcast_msg := <-n.Consensus.GetBroadcastMessages():
 			broadcast_msg.Sender = n.network.GetNodeInfo()
-			broadcast_msg.Shard = n.network.ShardNum
+			// broadcast_msg.Shard = n.network.ShardNum
+			broadcast_msg.TargetShard = n.network.ShardNum
+			broadcast_msg.SenderShard = n.network.ShardNum
 			n.network.Broadcast(broadcast_msg)
 		case broadcast_msg := <-n.Shard.GetBroadcastMessages():
 			n.network.BroadcastToShard(broadcast_msg)

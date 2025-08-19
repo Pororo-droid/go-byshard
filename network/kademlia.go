@@ -157,7 +157,11 @@ func (kn *Kademlia) handleConnection(conn net.Conn) {
 
 	// Add sender to routing table
 	// kn.routingTable.AddContact(msg.Sender)
-	kn.routingTable[msg.Shard].AddContact(msg.Sender)
+	// kn.routingTable[msg.Shard].AddContact(msg.Sender)
+	if _, exists := kn.routingTable[msg.SenderShard]; !exists {
+		kn.routingTable[msg.SenderShard] = NewRoutingTable(kn.node)
+	}
+	kn.routingTable[msg.SenderShard].AddContact(msg.Sender)
 
 	response := kn.handleMessage(msg)
 	if response != nil {
@@ -176,7 +180,9 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 			ID:        msg.ID,
 			Sender:    kn.node,
 			Timestamp: time.Now(),
-			Shard:     msg.Shard,
+			// Shard:     msg.Shard,
+			TargetShard: msg.TargetShard,
+			SenderShard: msg.SenderShard,
 		}
 
 	case message.FIND_NODE:
@@ -188,53 +194,18 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 		// 	Nodes:     nodes,
 		// 	Timestamp: time.Now(),
 		// }
-		nodes := kn.routingTable[msg.Shard].FindClosestNodes(msg.Target, K)
+		nodes := kn.routingTable[msg.TargetShard].FindClosestNodes(msg.Target, K)
 		return &message.Message{
 			Type:      message.FIND_NODE_RESPONSE,
 			ID:        msg.ID,
 			Sender:    kn.node,
 			Nodes:     nodes,
 			Timestamp: time.Now(),
-			Shard:     msg.Shard,
+			// Shard:     msg.Shard,
+			TargetShard: msg.TargetShard,
+			SenderShard: msg.SenderShard,
 		}
 
-	case message.FIND_VALUE:
-		kn.mutex.RLock()
-		value, exists := kn.storage[msg.Key]
-		kn.mutex.RUnlock()
-
-		if exists {
-			return &message.Message{
-				Type:      message.FIND_VALUE_RESPONSE,
-				ID:        msg.ID,
-				Sender:    kn.node,
-				Key:       msg.Key,
-				Value:     value,
-				Timestamp: time.Now(),
-				Shard:     msg.Shard,
-			}
-		} else {
-			nodes := kn.routingTable[msg.Shard].FindClosestNodes(identity.NewNodeID(msg.Key), K)
-			return &message.Message{
-				Type:      message.FIND_VALUE_RESPONSE,
-				ID:        msg.ID,
-				Sender:    kn.node,
-				Nodes:     nodes,
-				Timestamp: time.Now(),
-			}
-		}
-
-	case message.STORE:
-		kn.mutex.Lock()
-		kn.storage[msg.Key] = msg.Value
-		kn.mutex.Unlock()
-
-		return &message.Message{
-			Type:      message.STORE_RESPONSE,
-			ID:        msg.ID,
-			Sender:    kn.node,
-			Timestamp: time.Now(),
-		}
 	case message.BROADCAST:
 		// Handle broadcast message
 		kn.messageMutex.Lock()
@@ -249,7 +220,9 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 				ID:        msg.ID,
 				Sender:    kn.node,
 				Timestamp: time.Now(),
-				Shard:     msg.Shard,
+				// Shard:     msg.Shard,
+				TargetShard: msg.TargetShard,
+				SenderShard: msg.SenderShard,
 			}
 		}
 
@@ -271,7 +244,9 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 			ID:        msg.ID,
 			Sender:    kn.node,
 			Timestamp: time.Now(),
-			Shard:     msg.Shard,
+			// Shard:     msg.Shard,
+			TargetShard: msg.TargetShard,
+			SenderShard: msg.SenderShard,
 		}
 
 	case message.LEAVE:
@@ -279,14 +254,16 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 		// log.Infof("Node %s:%d received leave notification from %s:%d", kn.node.IP, kn.node.Port, msg.Sender.IP, msg.Sender.Port)
 
 		// kn.routingTable.RemoveContact(msg.Sender.ID)
-		kn.routingTable[msg.Shard].RemoveContact(msg.Sender.ID)
+		kn.routingTable[msg.SenderShard].RemoveContact(msg.Sender.ID)
 
 		return &message.Message{
 			Type:      message.LEAVE_ACK,
 			ID:        msg.ID,
 			Sender:    kn.node,
 			Timestamp: time.Now(),
-			Shard:     msg.Shard,
+			// Shard:     msg.Shard,
+			TargetShard: msg.TargetShard,
+			SenderShard: msg.SenderShard,
 		}
 	}
 	return nil
@@ -308,7 +285,7 @@ func (kn *Kademlia) sendMessage(target identity.KademliaNode, msg message.Messag
 	msg.Timestamp = time.Now()
 
 	// checkShard
-	if msg.Shard == 0 {
+	if msg.TargetShard == 0 || msg.SenderShard == 0 {
 		panic("shard 0")
 	}
 
@@ -323,7 +300,7 @@ func (kn *Kademlia) sendMessage(target identity.KademliaNode, msg message.Messag
 
 	// Add responder to routing table
 	// kn.routingTable.AddContact(response.Sender)
-	kn.routingTable[msg.Shard].AddContact(response.Sender)
+	kn.routingTable[msg.SenderShard].AddContact(response.Sender)
 
 	return &response, nil
 }
@@ -331,9 +308,11 @@ func (kn *Kademlia) sendMessage(target identity.KademliaNode, msg message.Messag
 // Ping sends a ping message to a node
 func (kn *Kademlia) Ping(target identity.KademliaNode, shard_num int) error {
 	msg := message.Message{
-		Type:  message.PING,
-		ID:    fmt.Sprintf("ping-%d", time.Now().UnixNano()),
-		Shard: shard_num,
+		Type: message.PING,
+		ID:   fmt.Sprintf("ping-%d", time.Now().UnixNano()),
+		// Shard: shard_num,
+		TargetShard: shard_num,
+		SenderShard: kn.ShardNum,
 	}
 
 	response, err := kn.sendMessage(target, msg)
@@ -354,7 +333,9 @@ func (kn *Kademlia) FindNode(target identity.KademliaNodeID, shard_num int) ([]i
 		Type:   message.FIND_NODE,
 		ID:     fmt.Sprintf("find_node-%d", time.Now().UnixNano()),
 		Target: target,
-		Shard:  shard_num,
+		// Shard:  shard_num,
+		TargetShard: shard_num,
+		SenderShard: kn.ShardNum,
 	}
 
 	closestNodes := kn.routingTable[shard_num].FindClosestNodes(target, ALPHA)
@@ -530,7 +511,9 @@ func (kn *Kademlia) iterativeFindNode(target identity.KademliaNodeID, shard_num 
 					Type:   message.FIND_NODE,
 					ID:     fmt.Sprintf("iterative_find_node-%d", time.Now().UnixNano()),
 					Target: target,
-					Shard:  shard_num,
+					// Shard:  shard_num,
+					TargetShard: shard_num,
+					SenderShard: kn.ShardNum,
 				}
 
 				response, err := kn.sendMessage(n, msg)
@@ -610,12 +593,12 @@ func (kn *Kademlia) sendBroadcastToAllNodes(msg message.Message) error {
 	// 	allContacts = append(allContacts, bucket.GetContacts()...)
 	// }
 
-	if _, exists := kn.routingTable[msg.Shard]; !exists {
-		log.Infof("shard %v routing table doesn't exists routingTabel, initialize...", msg.Shard)
-		kn.routingTable[msg.Shard] = NewRoutingTable(kn.node)
+	if _, exists := kn.routingTable[msg.TargetShard]; !exists {
+		log.Infof("shard %v routing table doesn't exists routingTabel, initialize...", msg.TargetShard)
+		kn.routingTable[msg.TargetShard] = NewRoutingTable(kn.node)
 	}
 
-	for _, bucket := range kn.routingTable[msg.Shard].buckets {
+	for _, bucket := range kn.routingTable[msg.TargetShard].buckets {
 		allContacts = append(allContacts, bucket.GetContacts()...)
 	}
 
@@ -658,7 +641,10 @@ func (kn *Kademlia) forwardBroadcast(originalMsg message.Message) {
 	var allContacts []Contact
 
 	// Collect all contacts from all buckets
-	for _, bucket := range kn.routingTable[originalMsg.Shard].buckets {
+	// for _, bucket := range kn.routingTable[originalMsg.Shard].buckets {
+	// 	allContacts = append(allContacts, bucket.GetContacts()...)
+	// }
+	for _, bucket := range kn.routingTable[originalMsg.TargetShard].buckets {
 		allContacts = append(allContacts, bucket.GetContacts()...)
 	}
 
@@ -713,7 +699,7 @@ func (kn *Kademlia) putData(msg message.Message) {
 		kn.ConsensusMessages <- msg
 	case "shard":
 		log.Infof("[%v:%v] received shard message: %v", kn.node.IP, kn.node.Port, msg)
-		// kn.ShardMessages <- msg
+		kn.ShardMessages <- msg
 	}
 }
 
@@ -732,14 +718,16 @@ func (kn *Kademlia) BroadcastToShard(msg message.ShardMessage) {
 		Timestamp: time.Now(),
 		DataType:  "shard",
 		Data:      msg,
-		Shard:     msg.TargetShard,
+		// Shard:     msg.TargetShard,
+		TargetShard: msg.TargetShard,
+		SenderShard: kn.ShardNum,
 	}
 	kn.Broadcast(broadcast_msg)
 
 	kn.Leave(msg.TargetShard)
 }
 
-// Leave gracefully leaves the Kademlia network
+// Leave gracefully leaves the Kademli	a network
 func (kn *Kademlia) Leave(shard_num int) error {
 	// log.Infof("Node %s:%d is leaving the shard network %v", kn.node.IP, kn.node.Port, shard_num)
 
@@ -749,7 +737,9 @@ func (kn *Kademlia) Leave(shard_num int) error {
 		ID:        fmt.Sprintf("leave-%d", time.Now().UnixNano()),
 		Sender:    kn.node,
 		Timestamp: time.Now(),
-		Shard:     shard_num,
+		// Shard:     shard_num,
+		TargetShard: shard_num,
+		SenderShard: kn.ShardNum,
 	}
 
 	// Get all connected nodes

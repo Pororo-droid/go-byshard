@@ -47,7 +47,9 @@ type Message struct {
 	Data        interface{}
 
 	// 메시지가 향할 Shard 번호
-	Shard       int
+	TargetShard int
+	SenderShard int
+	// Shard       int
 }
 
 // ShardMessage represents a Kademlia protocol message for Sharding

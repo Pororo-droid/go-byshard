@@ -52,7 +52,7 @@ func (n *Linear) Handle(msg interface{}) {
 
 	// 외부에서 들어온 Shard Message
 	if err := utils.MapToStruct(map_data, &shard_msg); err == nil {
-		log.Info(shard_msg)
+		// log.Info(shard_msg)
 		// n.HandleVote(vote_msg)
 		var shard_request message.ShardRequest
 		shard_request.Votes = append(shard_request.Votes, shard_msg.Message)
