@@ -1,8 +1,8 @@
-package shard
+package orchestration
 
 import "Pororo-droid/go-byshard/message"
 
-type Shard interface {
+type Orchestration interface {
 	Handle(interface{})
 	Propose(message.ShardRequest)
 	SetToPrimary()

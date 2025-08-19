@@ -4,7 +4,7 @@ import (
 	"Pororo-droid/go-byshard/consensus"
 	"Pororo-droid/go-byshard/db"
 	"Pororo-droid/go-byshard/network"
-	"Pororo-droid/go-byshard/shard"
+	"Pororo-droid/go-byshard/orchestration"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -14,7 +14,7 @@ type Node struct {
 	privateKey *ecdsa.PrivateKey
 	network    *network.Kademlia
 	Consensus  consensus.Consensus
-	Shard      shard.Shard
+	Shard      orchestration.Orchestration
 
 	stateDB db.DB
 }
@@ -39,7 +39,7 @@ func NewNode(ip string, port int, alg string, shard_num int) Node {
 		node.Consensus = consensus.NewPBFT(ip, port, privateKey, node.stateDB)
 	}
 
-	node.Shard = shard.NewLinear(ip, port)
+	node.Shard = orchestration.NewLinear(ip, port)
 
 	return *node
 }
@@ -50,7 +50,7 @@ func (n *Node) Run() {
 		case consensus_msg := <-n.network.ConsensusMessages:
 			n.Consensus.Handle(consensus_msg.Data)
 		case shard_msg := <-n.network.ShardMessages:
-			n.Shard.Handle(shard_msg)
+			n.Shard.Handle(shard_msg.Data)
 		case forward_msg := <-n.Shard.GetForward():
 			n.Consensus.Propose(forward_msg)
 		case forward_msg := <-n.Consensus.GetConsensusResults():

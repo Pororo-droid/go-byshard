@@ -1,7 +1,8 @@
-package shard
+package orchestration
 
 import (
 	"Pororo-droid/go-byshard/config"
+	"Pororo-droid/go-byshard/log"
 	"Pororo-droid/go-byshard/message"
 	"Pororo-droid/go-byshard/utils"
 	"fmt"
@@ -41,18 +42,24 @@ func NewLinear(ip string, port int) *Linear {
 }
 
 func (n *Linear) Handle(msg interface{}) {
-	// map_data, ok := msg.(map[string]interface{})
-	// if !ok {
-	// 	log.Errorf("형변환 시도 중 에러 발생")
-	// 	return
-	// }
+	map_data, ok := msg.(map[string]interface{})
+	if !ok {
+		log.Errorf("형변환 시도 중 에러 발생")
+		return
+	}
 
-	// var vote_msg message.Message
+	var shard_msg message.ShardMessage
 
-	// if err := utils.MapToStruct(map_data, &vote_msg); err == nil {
-	// 	n.HandleVote(vote_msg)
-	// 	return
-	// }
+	// 외부에서 들어온 Shard Message
+	if err := utils.MapToStruct(map_data, &shard_msg); err == nil {
+		log.Info(shard_msg)
+		// n.HandleVote(vote_msg)
+		var shard_request message.ShardRequest
+		shard_request.Votes = append(shard_request.Votes, shard_msg.Message)
+
+		n.Propose(shard_request)
+		return
+	}
 }
 
 func (n *Linear) HandleConsensusResult(result message.ConsenusResult) {
