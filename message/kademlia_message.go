@@ -55,7 +55,7 @@ type Message struct {
 // ShardMessage represents a Kademlia protocol message for Sharding
 type ShardMessage struct {
 	TargetShard int
-	Message     Request
+	Request     ShardRequest
 }
 
 // Request represents a client request

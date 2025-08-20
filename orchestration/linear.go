@@ -52,14 +52,13 @@ func (n *Linear) Handle(msg interface{}) {
 
 	// 외부에서 들어온 Shard Message
 	if err := utils.MapToStruct(map_data, &shard_msg); err == nil {
-		// log.Info(shard_msg)
+		log.Infof("[%v:%v] handling shard msg %v", n.ip, n.port, shard_msg)
 		// n.HandleVote(vote_msg)
-		var shard_request message.ShardRequest
-		shard_request.Votes = append(shard_request.Votes, shard_msg.Message)
-
-		n.Propose(shard_request)
+		n.Propose(shard_msg.Request)
 		return
 	}
+
+	log.Errorf("[%v:%v] unable to find a mapping struct %v", n.ip, n.port, msg)
 }
 
 func (n *Linear) HandleConsensusResult(result message.ConsenusResult) {
@@ -69,6 +68,15 @@ func (n *Linear) HandleConsensusResult(result message.ConsenusResult) {
 	}
 
 	shard_msg := n.messages[result.Request.GetID()]
+	if len(shard_msg.Votes) == 0 {
+		log.Info(shard_msg)
+		if len(shard_msg.Commits) == 1 {
+			log.Infof("[%v:%v] !!!!!!!!!!!!!!!!!!!!!!!!!!!! COMMIT !!!!!!!!!!!!!!!!!!!!!!!!!\n", n.ip, n.port)
+		} else if len(shard_msg.Aborts) == 1 {
+			log.Infof("[%v:%v] !!!!!!!!!!!!!!!!!!!!!!!!!!!! ABORT !!!!!!!!!!!!!!!!!!!!!!!!!\n", n.ip, n.port)
+		}
+		return
+	}
 
 	switch result.Result {
 	case "commit-vote":
@@ -81,19 +89,21 @@ func (n *Linear) HandleConsensusResult(result message.ConsenusResult) {
 func (n *Linear) handleCommitVote(shard_msg message.ShardRequest) {
 	// (Todo) 리더만 저장하기 때문에 여기서 에러가 발생!
 	shard_msg.Votes = shard_msg.Votes[1:]
-
 	if len(shard_msg.Votes) == 0 {
 		// Send to shards in commit
 		for _, msg := range shard_msg.Commits {
 			// broadcast msg to shards
-			n.broadcastToShard(msg, utils.FindShard(msg.Target))
+			var commit message.ShardRequest
+			commit.Commits = append(commit.Commits, msg)
+			n.broadcastToShard(commit, utils.FindShard(msg.Target))
 		}
 		return
 	}
 
 	// broadcast msg to votes[0]
 	// (Todo) 우선은 Vote[0]으로, interface로 변경할 필요가 있을까?
-	n.broadcastToShard(shard_msg.Votes[0], utils.FindShard(shard_msg.Votes[0].Target))
+
+	n.broadcastToShard(shard_msg, utils.FindShard(shard_msg.Votes[0].Target))
 }
 
 func (n *Linear) handleAbort(shard_msg message.ShardRequest) {
@@ -102,6 +112,20 @@ func (n *Linear) handleAbort(shard_msg message.ShardRequest) {
 
 func (n *Linear) Propose(msg message.ShardRequest) {
 	if !n.isPrimary {
+		return
+	}
+
+	if len(msg.Votes) == 0 {
+		// Commit or Abort
+		if len(msg.Commits) != 0 {
+			// Commit
+			n.messages[msg.Commits[0].GetID()] = msg
+			n.forward <- msg.Commits[0]
+		} else {
+			// Abort
+			n.messages[msg.Aborts[0].GetID()] = msg
+			n.forward <- msg.Aborts[0]
+		}
 		return
 	}
 
@@ -117,12 +141,13 @@ func (n *Linear) GetForward() chan message.Request {
 	return n.forward
 }
 
-func (n *Linear) broadcastToShard(msg message.Request, shard int) {
+func (n *Linear) broadcastToShard(msg message.ShardRequest, shard int) {
 	network_msg := message.ShardMessage{
 		TargetShard: shard,
-		Message:     msg,
+		Request:     msg,
 	}
 
+	log.Infof("[%v:%v] broadcast to shard %v", n.ip, n.port, msg)
 	n.BroadcastMessages <- network_msg
 }
 

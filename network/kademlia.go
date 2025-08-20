@@ -704,7 +704,7 @@ func (kn *Kademlia) putData(msg message.Message) {
 }
 
 func (kn *Kademlia) BroadcastToShard(msg message.ShardMessage) {
-	log.Infof("Sending Message to %v shard, Message: %v", msg.TargetShard, msg.Message)
+	log.Infof("Sending Message to %v shard, Message: %v", msg.TargetShard, msg.Request)
 
 	if err := kn.Join(msg.TargetShard); err != nil {
 		log.Errorf("[%v:%v] error while joining to target shard %v, err: %v ", kn.node.IP, kn.node.Port, msg.TargetShard, err)
