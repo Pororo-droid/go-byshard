@@ -370,6 +370,10 @@ func (n *PBFT) GetBroadcastMessages() chan message.Message {
 
 // execute를 언제할지, 그리고 abort시 어떤 정보들을 보내야하는지 고안 필요
 func (n *PBFT) execute(key string) {
+	if _, exists := n.receivedPreprepares[key]; !exists {
+		fmt.Printf("[%s:%d] doesn't have the key %s\n", n.ip, n.port, key)
+		panic("1")
+	}
 	preprepare := n.receivedPreprepares[key]
 	request := preprepare.Request
 

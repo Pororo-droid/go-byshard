@@ -146,8 +146,6 @@ func (n *Linear) broadcastToShard(msg message.ShardRequest, shard int) {
 		TargetShard: shard,
 		Request:     msg,
 	}
-
-	log.Infof("[%v:%v] broadcast to shard %v", n.ip, n.port, msg)
 	n.BroadcastMessages <- network_msg
 }
 

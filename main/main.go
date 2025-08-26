@@ -57,7 +57,7 @@ func Start(ip_list []string, port_list []int, shard_num int) []node.Node {
 
 	nodes[0].Consensus.SetToPrimary()
 	// nodes[0].Consensus.Propose(req_msg)
-	nodes[0].Shard.SetToPrimary()
+	nodes[0].Orchestration.SetToPrimary()
 
 	return nodes
 }
@@ -89,6 +89,13 @@ func propose(nodes []node.Node) {
 				Amount:    500,
 				Condition: 0,
 				Timestamp: time.Now(),
+			}, message.Request{
+				ClientID:  1,
+				Operation: "Add",
+				Target:    "Ana",
+				Amount:    100,
+				Condition: 200,
+				Timestamp: time.Now(),
 			},
 		}, Aborts: []message.Request{
 			message.Request{
@@ -102,5 +109,5 @@ func propose(nodes []node.Node) {
 		},
 	}
 
-	nodes[0].Shard.Propose(shard_req)
+	nodes[0].Orchestration.Propose(shard_req)
 }

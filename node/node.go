@@ -11,10 +11,10 @@ import (
 )
 
 type Node struct {
-	privateKey *ecdsa.PrivateKey
-	network    *network.Kademlia
-	Consensus  consensus.Consensus
-	Shard      orchestration.Orchestration
+	privateKey    *ecdsa.PrivateKey
+	network       *network.Kademlia
+	Consensus     consensus.Consensus
+	Orchestration orchestration.Orchestration
 
 	stateDB db.DB
 }
@@ -39,7 +39,7 @@ func NewNode(ip string, port int, alg string, shard_num int) Node {
 		node.Consensus = consensus.NewPBFT(ip, port, privateKey, node.stateDB)
 	}
 
-	node.Shard = orchestration.NewLinear(ip, port)
+	node.Orchestration = orchestration.NewLinear(ip, port)
 
 	return *node
 }
@@ -50,18 +50,18 @@ func (n *Node) Run() {
 		case consensus_msg := <-n.network.ConsensusMessages:
 			n.Consensus.Handle(consensus_msg.Data)
 		case shard_msg := <-n.network.ShardMessages:
-			n.Shard.Handle(shard_msg.Data)
-		case forward_msg := <-n.Shard.GetForward():
+			n.Orchestration.Handle(shard_msg.Data)
+		case forward_msg := <-n.Orchestration.GetForward():
 			n.Consensus.Propose(forward_msg)
 		case forward_msg := <-n.Consensus.GetConsensusResults():
-			n.Shard.HandleConsensusResult(forward_msg)
+			n.Orchestration.HandleConsensusResult(forward_msg)
 		case broadcast_msg := <-n.Consensus.GetBroadcastMessages():
 			broadcast_msg.Sender = n.network.GetNodeInfo()
 			// broadcast_msg.Shard = n.network.ShardNum
 			broadcast_msg.TargetShard = n.network.ShardNum
 			broadcast_msg.SenderShard = n.network.ShardNum
 			n.network.Broadcast(broadcast_msg)
-		case broadcast_msg := <-n.Shard.GetBroadcastMessages():
+		case broadcast_msg := <-n.Orchestration.GetBroadcastMessages():
 			n.network.BroadcastToShard(broadcast_msg)
 		}
 	}

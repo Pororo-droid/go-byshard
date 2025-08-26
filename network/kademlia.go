@@ -161,6 +161,8 @@ func (kn *Kademlia) handleConnection(conn net.Conn) {
 	if _, exists := kn.routingTable[msg.SenderShard]; !exists {
 		kn.routingTable[msg.SenderShard] = NewRoutingTable(kn.node)
 	}
+
+	// log.Infof("[%v:%v] add contact shard %v / %v by msg: %v", kn.node.IP, kn.node.Port, msg.SenderShard, msg.Sender.Port, msg.DataType)
 	kn.routingTable[msg.SenderShard].AddContact(msg.Sender)
 
 	response := kn.handleMessage(msg)
@@ -182,7 +184,7 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 			Timestamp: time.Now(),
 			// Shard:     msg.Shard,
 			TargetShard: msg.TargetShard,
-			SenderShard: msg.SenderShard,
+			SenderShard: kn.ShardNum,
 		}
 
 	case message.FIND_NODE:
@@ -203,7 +205,7 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 			Timestamp: time.Now(),
 			// Shard:     msg.Shard,
 			TargetShard: msg.TargetShard,
-			SenderShard: msg.SenderShard,
+			SenderShard: kn.ShardNum,
 		}
 
 	case message.BROADCAST:
@@ -222,7 +224,7 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 				Timestamp: time.Now(),
 				// Shard:     msg.Shard,
 				TargetShard: msg.TargetShard,
-				SenderShard: msg.SenderShard,
+				SenderShard: kn.ShardNum,
 			}
 		}
 
@@ -246,7 +248,7 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 			Timestamp: time.Now(),
 			// Shard:     msg.Shard,
 			TargetShard: msg.TargetShard,
-			SenderShard: msg.SenderShard,
+			SenderShard: kn.ShardNum,
 		}
 
 	case message.LEAVE:
@@ -263,7 +265,7 @@ func (kn *Kademlia) handleMessage(msg message.Message) *message.Message {
 			Timestamp: time.Now(),
 			// Shard:     msg.Shard,
 			TargetShard: msg.TargetShard,
-			SenderShard: msg.SenderShard,
+			SenderShard: kn.ShardNum,
 		}
 	}
 	return nil
@@ -300,7 +302,8 @@ func (kn *Kademlia) sendMessage(target identity.KademliaNode, msg message.Messag
 
 	// Add responder to routing table
 	// kn.routingTable.AddContact(response.Sender)
-	kn.routingTable[msg.SenderShard].AddContact(response.Sender)
+	// log.Infof("[%v:%v] add contact shard %v / %v by msg: %v", kn.node.IP, kn.node.Port, response.SenderShard, response.Sender.Port, msg.DataType)
+	kn.routingTable[response.SenderShard].AddContact(response.Sender)
 
 	return &response, nil
 }
@@ -363,9 +366,9 @@ func (kn *Kademlia) FindNode(target identity.KademliaNodeID, shard_num int) ([]i
 func (kn *Kademlia) Join(shard_num int) error {
 	// fmt.printf("[노드 %s:%d] 네트워크 참여 시작 - bootstrap: %s:%d\n",
 	//	 kn.node.IP, kn.node.Port, bootstrap.IP, bootstrap.Port)
-	if _, exists := kn.routingTable[shard_num]; !exists {
-		kn.routingTable[shard_num] = NewRoutingTable(kn.node)
-	}
+	kn.routingTable[shard_num] = NewRoutingTable(kn.node)
+	// if _, exists := kn.routingTable[shard_num]; !exists {
+	// }
 
 	bootstrap := identity.KademliaNode{
 		IP:   config.GetConfig().BootstrapList[shard_num-1].IP,
@@ -374,6 +377,7 @@ func (kn *Kademlia) Join(shard_num int) error {
 	}
 
 	// Step 1: Add bootstrap node to routing table
+	// log.Infof("[%v:%v] add contact shard %v / %v", kn.node.IP, kn.node.Port, shard_num, bootstrap.Port)
 	kn.routingTable[shard_num].AddContact(bootstrap)
 
 	// Step 2: Ping bootstrap node to establish connection
@@ -396,6 +400,7 @@ func (kn *Kademlia) Join(shard_num int) error {
 		}
 
 		// Add to routing table
+		// log.Infof("[%v:%v] add contact shard %v / %v", kn.node.IP, kn.node.Port, shard_num, node.Port)
 		kn.routingTable[shard_num].AddContact(node)
 
 		// Try to ping each node
@@ -455,6 +460,7 @@ func (kn *Kademlia) performIterativeNodeLookup(shard_num int) error {
 		// Connect to discovered nodes
 		for _, node := range nodes {
 			if node.ID != kn.node.ID {
+				// log.Infof("[%v:%v] add contact shard %v / %v", kn.node.IP, kn.node.Port, shard_num, node.Port)
 				kn.routingTable[shard_num].AddContact(node)
 				// Try to establish connection
 				go func(n identity.KademliaNode) {
@@ -581,11 +587,27 @@ func (kn *Kademlia) Broadcast(msg message.Message) error {
 	// fmt.Printf("[노드 %s:%d] 브로드캐스트 메시지 발송: '%s'\n",
 	// 	kn.node.IP, kn.node.Port, msg.MessageData)
 
+	// kn.printTable()
 	return kn.sendBroadcastToAllNodes(msg)
+}
+
+func (kn *Kademlia) printTable() {
+	var allContacts string
+	for k, rt := range kn.routingTable {
+		for _, bucket := range rt.buckets {
+			for _, contact := range bucket.GetContacts() {
+				allContacts = fmt.Sprintf("%s, shard: %d ip: %s:%d", allContacts, k, contact.Node.IP, contact.Node.Port)
+			}
+		}
+	}
+
+	log.Infof("[%v:%v] printTabe %v", kn.node.IP, kn.node.Port, allContacts)
 }
 
 // sendBroadcastToAllNodes sends broadcast message to all nodes in routing table
 func (kn *Kademlia) sendBroadcastToAllNodes(msg message.Message) error {
+	log.Infof("[%s] 브로드캐스트 처리: DataType=%s, TargetShard=%d, 현재샤드=%d",
+		kn.node.ID.String()[:8], msg.DataType, msg.TargetShard, kn.ShardNum)
 	var allContacts []Contact
 
 	// Collect all contacts from all buckets
@@ -594,8 +616,8 @@ func (kn *Kademlia) sendBroadcastToAllNodes(msg message.Message) error {
 	// }
 
 	if _, exists := kn.routingTable[msg.TargetShard]; !exists {
-		log.Infof("shard %v routing table doesn't exists routingTabel, initialize...", msg.TargetShard)
-		kn.routingTable[msg.TargetShard] = NewRoutingTable(kn.node)
+		log.Errorf("shard %v routing table doesn't exists routingTabel, initialize...", msg.TargetShard)
+		panic(2222)
 	}
 
 	for _, bucket := range kn.routingTable[msg.TargetShard].buckets {
@@ -637,6 +659,8 @@ func (kn *Kademlia) forwardBroadcast(originalMsg message.Message) {
 	forwardMsg := originalMsg
 	forwardMsg.TTL = originalMsg.TTL - 1
 	forwardMsg.ID = fmt.Sprintf("broadcast-forward-%d", time.Now().UnixNano())
+	forwardMsg.Sender = kn.node
+	forwardMsg.SenderShard = kn.ShardNum
 
 	var allContacts []Contact
 
@@ -704,7 +728,7 @@ func (kn *Kademlia) putData(msg message.Message) {
 }
 
 func (kn *Kademlia) BroadcastToShard(msg message.ShardMessage) {
-	log.Infof("Sending Message to %v shard, Message: %v", msg.TargetShard, msg.Request)
+	log.Infof("[%s:%d] Sending Message to %v shard, Message: %v", kn.node.IP, kn.node.Port, msg.TargetShard, msg.Request)
 
 	if err := kn.Join(msg.TargetShard); err != nil {
 		log.Errorf("[%v:%v] error while joining to target shard %v, err: %v ", kn.node.IP, kn.node.Port, msg.TargetShard, err)
@@ -721,10 +745,11 @@ func (kn *Kademlia) BroadcastToShard(msg message.ShardMessage) {
 		// Shard:     msg.TargetShard,
 		TargetShard: msg.TargetShard,
 		SenderShard: kn.ShardNum,
+		Sender:      kn.node,
 	}
 	kn.Broadcast(broadcast_msg)
 
-	kn.Leave(msg.TargetShard)
+	// kn.Leave(msg.TargetShard)
 }
 
 // Leave gracefully leaves the Kademli	a network
@@ -761,14 +786,14 @@ func (kn *Kademlia) Leave(shard_num int) error {
 			}
 
 			if response.Type == message.LEAVE_ACK {
-				// log.Debugf("Received leave acknowledgment from %s:%d",targetNode.IP, targetNode.Port)
+				log.Debugf("[%v:%v] Received leave acknowledgment from %s:%d", kn.node.IP, kn.node.Port, targetNode.IP, targetNode.Port)
 			}
 		}(node)
 		successCount++
 	}
 
 	// Wait a bit for leave messages to be sent
-	time.Sleep(100 * time.Millisecond)
+	// time.Sleep(100 * time.Millisecond)
 
 	// Clear our routing table
 	kn.routingTable[shard_num] = NewRoutingTable(kn.node)
